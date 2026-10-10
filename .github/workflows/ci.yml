@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-package:
+    name: PaydayBridgeKit (Linux swift test)
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2-noble
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Swift version
+        run: swift --version
+      - name: Run package tests
+        run: swift test --package-path Packages/PaydayBridgeKit
+      - name: Zero-network gate
+        run: bash scripts/check_zero_network.sh
+      - name: Native-only framework gate
+        run: bash scripts/check_native_only.sh
+      - name: Gitignore keeps signing material out
+        run: |
+          set -e
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          for f in fake.p8 fake.p12 fake.mobileprovision fake.cer; do
+            touch "$f"
+            git check-ignore -q "$f" || { echo "FAIL: $f is not gitignored"; exit 1; }
+            rm "$f"
+          done
+          echo "Signing-material gitignore check: PASS"
+
+  ios-build:
+    name: iOS build + iPhone-only + toolchain pin
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Select exact pinned toolchain (blocker if absent)
+        run: |
+          set -euo pipefail
+          REQUIRED_VERSION="Xcode 26.0.1"
+          REQUIRED_BUILD="17A400"
+          found=""
+          for app in /Applications/Xcode_26.0.1.app /Applications/Xcode_26.0.1_*.app /Applications/Xcode_26.0.app /Applications/Xcode.app; do
+            [ -d "$app" ] || continue
+            dev="$app/Contents/Developer"
+            ver=$(DEVELOPER_DIR="$dev" xcodebuild -version 2>/dev/null | tr -d '\r') || continue
+            vline=$(printf '%s\n' "$ver" | head -1)
+            bline=$(printf '%s\n' "$ver" | grep -i "build version" | awk '{print $3}')
+            if [ "$vline" = "$REQUIRED_VERSION" ] && [ "$bline" = "$REQUIRED_BUILD" ]; then
+              found="$dev"
+              echo "Exact pin found: $app ($vline, build $bline)"
+              break
+            fi
+          done
+          if [ -z "$found" ]; then
+            echo "::error::ACCEPTANCE BLOCKER: required toolchain $REQUIRED_VERSION ($REQUIRED_BUILD) missing. Enumerated candidates:"
+            for app in /Applications/Xcode*.app; do
+              [ -d "$app" ] || continue
+              printf '%s -> ' "$app"
+              DEVELOPER_DIR="$app/Contents/Developer" xcodebuild -version || true
+            done
+            exit 1
+          fi
+          sudo xcode-select -s "$found"
+          xcodebuild -version
+          git rev-parse HEAD
+          swift test --package-path Packages/PaydayBridgeKit
+
+      - name: Assert iOS SDK 26.0 available
+        run: |
+          set -euo pipefail
+          [ "$(xcrun --sdk iphoneos --show-sdk-version)" = "26.0" ] || { echo "::error::ACCEPTANCE BLOCKER: iphoneos26.0 SDK missing from selected Xcode"; exit 1; }
+          [ "$(xcrun --sdk iphonesimulator --show-sdk-version)" = "26.0" ] || { echo "::error::ACCEPTANCE BLOCKER: iphonesimulator26.0 SDK missing from selected Xcode"; exit 1; }
+
+      - name: Zero-network gate
+        run: bash scripts/check_zero_network.sh
+      - name: Native-only framework gate
+        run: bash scripts/check_native_only.sh
+      - name: Run policy gate canaries
+        run: python3 scripts/test_policy_gates.py
+
+      - name: iPhone-only pre-build assertion
+        run: |
+          set -euo pipefail
+          PROJECT=PaydayBridge.xcodeproj/project.pbxproj
+          count=$(grep -c 'TARGETED_DEVICE_FAMILY = 1;' "$PROJECT")
+          [ "$count" -eq 4 ] || { echo "::error::Expected 4 iPhone-only settings (2 project + 2 app); found $count"; exit 1; }
+          if grep -E 'TARGETED_DEVICE_FAMILY = [^1;]' "$PROJECT"; then
+            echo "::error::Non-iPhone TARGETED_DEVICE_FAMILY found"
+            exit 1
+          fi
+          [ "$(grep -c 'PRODUCT_BUNDLE_IDENTIFIER = com.infinityball.paydaybridge;' "$PROJECT")" -eq 2 ] || { echo "::error::Bundle ID mismatch"; exit 1; }
+          echo "iPhone-only and bundle identifier pre-build assertions: PASS"
+
+      - name: Ensure iOS simulator platform runtime
+        timeout-minutes: 40
+        run: |
+          set -euo pipefail
+          SDK_VER=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          RUNTIME_ID="com.apple.CoreSimulator.SimRuntime.iOS-$(echo "$SDK_VER" | cut -d. -f1,2 | tr '.' '-')"
+          echo "Pinned iphonesimulator SDK: $SDK_VER — required runtime: $RUNTIME_ID"
+          if xcrun simctl list runtimes 2>/dev/null | grep -q "$RUNTIME_ID"; then
+            echo "Required runtime already present"
+          else
+            echo "Required runtime missing; downloading platform for pinned Xcode"
+            xcrun simctl list > /dev/null 2>&1 || true
+            xcodebuild -downloadPlatform iOS -architectureVariant universal || true
+            if ! xcrun simctl list runtimes | grep -q "$RUNTIME_ID"; then
+              echo "::error::ACCEPTANCE BLOCKER: iOS $SDK_VER simulator runtime could not be installed"
+              xcrun simctl list runtimes || true
+              exit 1
+            fi
+            echo "Runtime installed: $RUNTIME_ID"
+          fi
+
+      - name: Build for iphonesimulator
+        run: |
+          set -euo pipefail
+          xcodebuild -project PaydayBridge.xcodeproj \
+            -scheme PaydayBridge \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Release \
+            CODE_SIGNING_ALLOWED=NO \
+            -derivedDataPath DerivedData \
+            build
+
+      - name: iPhone-only post-build assertion (built Info.plist)
+        run: |
+          set -euo pipefail
+          APP=DerivedData/Build/Products/Release-iphonesimulator/PaydayBridge.app
+          [ -f "$APP/Info.plist" ] || { echo "::error::built app not found"; exit 1; }
+          python3 - "$APP/Info.plist" <<'PY'
+          import plistlib, sys
+          with open(sys.argv[1], 'rb') as f:
+              info = plistlib.load(f)
+          assert info['UIDeviceFamily'] == [1], info['UIDeviceFamily']
+          PY
+          echo "Built app UIDeviceFamily == [1]: PASS"
+          bundle_id=$(plutil -extract CFBundleIdentifier raw -o - "$APP/Info.plist")
+          [ "$bundle_id" = 'com.infinityball.paydaybridge' ] || { echo "::error::Bundle ID mismatch: $bundle_id"; exit 1; }
+          [ -f "$APP/PrivacyInfo.xcprivacy" ] || { echo "::error::PrivacyInfo.xcprivacy not embedded"; exit 1; }
+          echo "Built UIDeviceFamily == [1], bundle ID and privacy manifest: PASS"
