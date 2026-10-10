@@ -19,6 +19,9 @@ test-results/
 # Credentials and exported sensitive worksheets
 .env
 *.p8
+*.p12
+*.mobileprovision
+*.cer
 exports/
 backups/
 

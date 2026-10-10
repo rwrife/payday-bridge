@@ -41,10 +41,14 @@ No Flutter, React Native, Expo, Kotlin Multiplatform, .NET MAUI, Unity or other 
 No generic expense tracker, receipt splitting or long-term forecasting. The lazier alternative is a dated spreadsheet; this app earns its existence through due-date-aware assignment and safe what-if comparisons.
 
 ## Status and milestones
-Documentation/backlog only. No application source, Xcode project, CI, generated icon, release Action, build or TestFlight upload exists yet. See PLAN.md and issues #1–#7. Platform pins are planning declarations until measured in CI.
+- M1 (Issue #1, this PR): Native SwiftUI iPhone skeleton, shared Xcode scheme, pure-Swift PaydayBridgeKit package, exact toolchain pin on macos-26, iPhone-only enforcement (`TARGETED_DEVICE_FAMILY = 1` and built `UIDeviceFamily == [1]`), zero-network allowlist gate, and native-only dependency gate.
+- M2–M7: See PLAN.md and issues #2–#7 for upcoming milestones.
 
-## Development quickstart (after issue #1)
-Use macOS with measured Xcode 26.0.1/17A400 and iOS 26+ SDK. Clone, open the shared PaydayBridge Xcode scheme, and run on an iPhone simulator. Future pure-Swift domain checks use `swift test`; Linux/Docker evidence does not establish SwiftUI compilation or built device-family metadata. No build command exists in this scaffold yet.
+## Development quickstart
+- **Linux package tests (pure Swift domain)**: `swift test --package-path Packages/PaydayBridgeKit`
+- **Gate checks**: `bash scripts/check_zero_network.sh && bash scripts/check_native_only.sh`
+- **Native iOS app build**: macOS with measured Xcode 26.0.1 (17A400) and iOS 26+ SDK:
+  `xcodebuild -project PaydayBridge.xcodeproj -scheme PaydayBridge -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' build`
 
 ## Store and distribution contract
 `AppStore/description.txt` is pre-release copy; reconcile it with implemented features before release. Generate real `AppStore/icon.png` after the skeleton exists using the requested `hermes-image-gen` model and the exact issue #7 brief; verify opaque square edge-to-edge artwork and Xcode asset wiring. No placeholder icon or silent model substitution.

@@ -1,5 +1,5 @@
 {
-  "status": "planning-declaration - no CI exists yet",
+  "status": "active - M1 implemented",
   "schema": "tool-lab/toolchain/v1",
   "platform": "ios",
   "device_family": "iphone-only",
