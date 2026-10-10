@@ -1,0 +1,25 @@
+# Apple and editor outputs
+.DS_Store
+*.xcuserstate
+xcuserdata/
+DerivedData/
+.build/
+build/
+.swiftpm/
+
+# Generated reports and local data
+coverage/
+test-results/
+*.xcresult/
+*.sqlite-shm
+*.sqlite-wal
+*.bak
+*.log
+
+# Credentials and exported sensitive worksheets
+.env
+*.p8
+exports/
+backups/
+
+# Keep source/docs visible, especially AppStore/description.txt and approved icon source.

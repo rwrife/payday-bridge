@@ -1,0 +1,13 @@
+Payday Bridge — plan the gap between paydays.
+
+Pre-release concept description. The features below are planned and are not yet available in a shipping app.
+
+Monthly totals do not tell you which paycheck can cover a bill before its due date. Payday Bridge is being built as a private, offline iPhone worksheet for people with uneven pay dates.
+
+Enter your own dated cash snapshot, expected and confirmed income, and upcoming bills. Assign bills to pay envelopes and see explainable warnings when a funding date is late, an envelope is overcommitted, or an amount is still unknown. Expected income stays separate from confirmed coverage.
+
+Compare changes in a what-if draft without changing your saved plan. Apply or discard deliberately. Keep monthly bill occurrences, paid marks and portable backups under your control. Versioned JSON backup and CSV export are planned.
+
+No banking login, accounts, cloud sync, ads or trackers. No payments or automatic money movement. Figures are manual planning estimates, not verified bank balances or a guarantee that funds are available. Payday Bridge does not provide financial, tax or investment advice.
+
+Designed for iPhone with accessible controls and clear uncertainty labels. Future dual-screen layouts are a design direction, not a current compatibility claim.
