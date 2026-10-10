@@ -1,11 +1,11 @@
 import Testing
 @testable import PaydayBridgeKit
 
-@Suite("Skeleton contract")
+@Suite("Package contract")
 struct ContractTests {
     @Test func domainNamespace() {
         #expect(PaydayBridgeKit.domain == "PaydayBridgeKit")
-        #expect(PaydayBridgeKit.milestone == "M1-skeleton")
+        #expect(PaydayBridgeKit.milestone == "M2-domain")
     }
 
     @Test func planningTruth() {
