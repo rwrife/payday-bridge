@@ -1,8 +1,10 @@
 import Foundation
 #if canImport(Darwin)
 import Darwin
+private let posixRead = Darwin.read
 #else
 import Glibc
+private let posixRead = Glibc.read
 #endif
 
 public enum StorageFailure: Error, Sendable, Equatable {
@@ -177,16 +179,30 @@ public actor WorksheetStore {
     }
 
     private func read() throws -> WorksheetSnapshot? {
-        // Bound allocation before decoding, including malformed input.
-        let handle: FileHandle
-        do { handle = try FileHandle(forReadingFrom: fileURL) }
-        catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError { return nil }
-        catch { throw StorageFailure.unreadable }
-        defer { try? handle.close() }
-        let data: Data
-        do { data = try handle.read(upToCount: WorksheetSnapshot.maximumBytes + 1) ?? Data() }
-        catch { throw StorageFailure.unreadable }
-        return try WorksheetSnapshot.decode(data)
+        // POSIX errno distinguishes a missing plan from any unreadable existing path
+        // on both Darwin and Linux; never treat a permission error as a fresh plan.
+        let fd = open(fileURL.path, O_RDONLY | O_NONBLOCK)
+        if fd < 0 {
+            if errno == ENOENT { return nil }
+            throw StorageFailure.unreadable
+        }
+        defer { _ = close(fd) }
+        var status = stat()
+        guard fstat(fd, &status) == 0 && (status.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG) else {
+            throw StorageFailure.unreadable
+        }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+        while data.count <= WorksheetSnapshot.maximumBytes {
+            let count = buffer.withUnsafeMutableBytes { posixRead(fd, $0.baseAddress!, min($0.count, WorksheetSnapshot.maximumBytes + 1 - data.count)) }
+            if count < 0 {
+                if errno == EINTR { continue }
+                throw StorageFailure.unreadable
+            }
+            if count == 0 { return try WorksheetSnapshot.decode(data) }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+        throw StorageFailure.tooLarge
     }
 
     private func transaction<T>(_ operation: () throws -> T) throws -> T {

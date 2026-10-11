@@ -27,6 +27,20 @@ final class StorageTests: XCTestCase, @unchecked Sendable {
         catch { XCTAssertEqual(error as? StorageFailure, expected); XCTAssertFalse(expected.recoveryAction.isEmpty) }
     }
 
+    func testMissingPlanIsNotAnUnreadablePlan() async throws {
+        let url = try location()
+        let store = WorksheetStore(fileURL: url)
+        guard case .missing = await store.load() else { return XCTFail("Absent file must allow initial save") }
+        let saved = try await store.save(sheet(), expectedRevision: nil)
+        XCTAssertEqual(saved.worksheet.openingCash.value, 100)
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: url.path)
+        #if canImport(Darwin)
+        guard case .recovery(.unreadable) = await store.load() else { return XCTFail("Unreadable file is not missing") }
+        await failure(.unreadable) { _ = try await store.save(self.sheet("200"), expectedRevision: nil) }
+        #endif
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+
     func testFixturesAndFailedReadNeverOverwrite() async throws {
         for (name, expected) in [("truncated", StorageFailure.invalidData), ("future", .unsupportedSchema(2))] {
             let url = try location(); let bytes = try fixture(name)
