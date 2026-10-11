@@ -7,12 +7,13 @@ let package = Package(
     name: "PaydayBridgeKit",
     platforms: [
         .iOS("26.0"),
+        .macOS("15.0"),
     ],
     products: [
         .library(name: "PaydayBridgeKit", targets: ["PaydayBridgeKit"]),
     ],
     targets: [
         .target(name: "PaydayBridgeKit"),
-        .testTarget(name: "PaydayBridgeKitTests", dependencies: ["PaydayBridgeKit"]),
+        .testTarget(name: "PaydayBridgeKitTests", dependencies: ["PaydayBridgeKit"], resources: [.copy("Fixtures")]),
     ]
 )
