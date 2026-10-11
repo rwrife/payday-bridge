@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "revision": "00000000-0000-0000-0000-000000000001",
+  "worksheet": {
+    "currency": "USD",
+    "openingCash": {
+      "amount": "100",
+      "currency": "USD"
+    },
+    "openingDate": {
+      "year": 2026,
+      "month": 10,
+      "day": 1
+    },
+    "incomes": [],
+    "bills": [
+      {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "ti

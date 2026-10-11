@@ -13,6 +13,6 @@ let package = Package(
     ],
     targets: [
         .target(name: "PaydayBridgeKit"),
-        .testTarget(name: "PaydayBridgeKitTests", dependencies: ["PaydayBridgeKit"]),
+        .testTarget(name: "PaydayBridgeKitTests", dependencies: ["PaydayBridgeKit"], resources: [.copy("Fixtures")]),
     ]
 )
