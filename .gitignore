@@ -3,6 +3,9 @@
 *.xcuserstate
 xcuserdata/
 DerivedData/
+NativeTestDerivedData/
+NativeTestArtifacts/
+__pycache__/
 .build/
 build/
 .swiftpm/

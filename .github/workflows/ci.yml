@@ -46,6 +46,11 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      - name: Initialize native test diagnostics
+        run: |
+          mkdir -p NativeTestArtifacts
+          git rev-parse HEAD > NativeTestArtifacts/revision.txt
+
       - name: Select exact pinned toolchain (blocker if absent)
         run: |
           set -euo pipefail
@@ -125,6 +130,10 @@ jobs:
             echo "Runtime installed: $RUNTIME_ID"
           fi
 
+      - name: Test package on concrete iPhone simulator
+        timeout-minutes: 30
+        run: python3 scripts/test_ios_package.py
+
       - name: Build for iphonesimulator
         run: |
           set -euo pipefail
@@ -153,3 +162,11 @@ jobs:
           [ "$bundle_id" = 'com.infinityball.paydaybridge' ] || { echo "::error::Bundle ID mismatch: $bundle_id"; exit 1; }
           [ -f "$APP/PrivacyInfo.xcprivacy" ] || { echo "::error::PrivacyInfo.xcprivacy not embedded"; exit 1; }
           echo "Built UIDeviceFamily == [1], bundle ID and privacy manifest: PASS"
+
+      - name: Upload native test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-package-tests-${{ github.run_id }}
+          path: NativeTestArtifacts/
+          if-no-files-found: warn

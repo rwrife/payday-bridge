@@ -2,6 +2,8 @@ import Foundation
 import XCTest
 #if os(Linux)
 import Glibc
+#elseif os(macOS)
+import Darwin
 #endif
 @testable import PaydayBridgeKit
 
@@ -33,12 +35,15 @@ final class StorageTests: XCTestCase, @unchecked Sendable {
         guard case .missing = await store.load() else { return XCTFail("Absent file must allow initial save") }
         let saved = try await store.save(sheet(), expectedRevision: nil)
         XCTAssertEqual(saved.worksheet.openingCash.value, 100)
+        #if os(macOS)
+        // POSIX unreadability is a host check; iOS sandbox chmod behavior differs.
+        // Root can read mode-000 files, so this assertion needs an unprivileged host.
+        guard getuid() != 0 else { throw XCTSkip("Permission denial requires a non-root macOS host") }
         try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: url.path)
-        #if canImport(Darwin)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path) }
         guard case .recovery(.unreadable) = await store.load() else { return XCTFail("Unreadable file is not missing") }
         await failure(.unreadable) { _ = try await store.save(self.sheet("200"), expectedRevision: nil) }
         #endif
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
     func testFixturesAndFailedReadNeverOverwrite() async throws {
