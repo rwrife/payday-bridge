@@ -13,6 +13,10 @@ PACKAGE = ROOT / "Packages" / "PaydayBridgeKit"
 RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-26-0"
 
 
+class Deadline(RuntimeError):
+    """Command exceeded its deadline; distinct from a nonzero exit."""
+
+
 def run(name, command, timeout=60, cwd=ROOT):
     """Keep partial output and kill the command group when its deadline expires."""
     log = ARTIFACTS / f"{name}.log"
@@ -25,10 +29,41 @@ def run(name, command, timeout=60, cwd=ROOT):
         except subprocess.TimeoutExpired:
             os.killpg(process.pid, signal.SIGKILL)
             process.wait()
-            raise RuntimeError(f"{name} exceeded {timeout}s; see {log}")
+            raise Deadline(f"{name} exceeded {timeout}s; see {log}")
     if code:
         raise RuntimeError(f"{name} failed ({code}); see {log}")
     return log.read_text()
+
+
+def boot_and_wait(udid, needs_boot):
+    """Boot (if needed) and wait for readiness; recover ONE stalled boot.
+
+    The FIRST boot after a fresh `xcodebuild -downloadPlatform iOS` prepares
+    the device image lazily and routinely exceeds a 180s wait on hosted
+    runners (observed on 3 consecutive fresh runners here, matching the
+    fleet-wide pattern), so the first bootstatus gets a 300s bound. On a
+    deadline (never a nonzero exit) run one best-effort shutdown — which can
+    itself hang, tolerated — and retry boot+bootstatus once at the normal
+    180s bound. The second deadline fails closed.
+    """
+    for attempt, budget in ((1, 300), (2, 180)):
+        tag = "" if attempt == 1 else "-retry"
+        try:
+            if needs_boot:
+                run(f"boot{tag}", ["xcrun", "simctl", "boot", udid])
+            run(f"bootstatus{tag}", ["xcrun", "simctl", "bootstatus", udid, "-b"],
+                timeout=budget)
+            return
+        except Deadline:
+            if attempt == 2:
+                raise
+            try:
+                run("recovery-shutdown", ["xcrun", "simctl", "shutdown", udid],
+                    timeout=60)
+            except Exception as shutdown_error:
+                print(f"Recovery shutdown tolerated: {shutdown_error}",
+                      file=sys.stderr)
+            needs_boot = True
 
 
 def main():
@@ -41,11 +76,11 @@ def main():
     phones = [d for d in devices["devices"].get(RUNTIME, [])
               if d["isAvailable"] and d["deviceTypeIdentifier"] in iphone_types]
     created_udid = None
+    needs_boot = True
     if phones:
         selected = sorted(phones, key=lambda d: d["name"])[0]
         udid = selected["udid"]
-        if selected["state"] != "Booted":
-            run("boot", ["xcrun", "simctl", "boot", udid])
+        needs_boot = selected["state"] != "Booted"
     else:
         phone_type = next(t for t in types["devicetypes"] if t["name"] == "iPhone 17")
         udid = run("create", ["xcrun", "simctl", "create", "iPhone 17 CI",
@@ -53,9 +88,7 @@ def main():
         created_udid = udid
     (ARTIFACTS / "destination.txt").write_text(f"platform=iOS Simulator,id={udid}\n")
     try:
-        if created_udid:
-            run("boot", ["xcrun", "simctl", "boot", udid])
-        run("bootstatus", ["xcrun", "simctl", "bootstatus", udid, "-b"], timeout=180)
+        boot_and_wait(udid, needs_boot)
         listing = json.loads(run("schemes", ["xcodebuild", "-list", "-json"], cwd=PACKAGE))
         assert "PaydayBridgeKit" in listing.get("workspace", listing.get("project", {})).get("schemes", []), listing
         destination = f"platform=iOS Simulator,id={udid}"
