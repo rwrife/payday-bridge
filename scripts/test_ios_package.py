@@ -89,7 +89,12 @@ def main():
     (ARTIFACTS / "destination.txt").write_text(f"platform=iOS Simulator,id={udid}\n")
     try:
         boot_and_wait(udid, needs_boot)
-        listing = json.loads(run("schemes", ["xcodebuild", "-list", "-json"], timeout=180, cwd=PACKAGE))
+        schemes_output = run("schemes", ["xcodebuild", "-list", "-json"], timeout=180, cwd=PACKAGE)
+        # xcodebuild can print IDERunDestination diagnostics before its JSON on stderr.
+        json_start = schemes_output.find("{")
+        if json_start < 0:
+            raise RuntimeError("xcodebuild scheme listing has no JSON; see schemes.log")
+        listing, _ = json.JSONDecoder().raw_decode(schemes_output[json_start:])
         assert "PaydayBridgeKit" in listing.get("workspace", listing.get("project", {})).get("schemes", []), listing
         destination = f"platform=iOS Simulator,id={udid}"
         destinations = run("destinations", ["xcodebuild", "-scheme", "PaydayBridgeKit", "-showdestinations"],

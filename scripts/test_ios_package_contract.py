@@ -50,7 +50,7 @@ with tempfile.TemporaryDirectory() as directory:
             if name == "shutdown-created" and fail_shutdown:
                 raise RuntimeError("shutdown failed")
             if name == "schemes":
-                return json.dumps({"workspace": {"schemes": ["PaydayBridgeKit"]}})
+                return "2026-10-17 16:22:59.223 xcodebuild[10430:36594] [MT] IDERunDestination\n" + json.dumps({"workspace": {"schemes": ["PaydayBridgeKit"]}})
             if name == "destinations":
                 return "created existing"
             return ""
