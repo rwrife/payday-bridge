@@ -89,7 +89,7 @@ def main():
     (ARTIFACTS / "destination.txt").write_text(f"platform=iOS Simulator,id={udid}\n")
     try:
         boot_and_wait(udid, needs_boot)
-        listing = json.loads(run("schemes", ["xcodebuild", "-list", "-json"], cwd=PACKAGE))
+        listing = json.loads(run("schemes", ["xcodebuild", "-list", "-json"], timeout=180, cwd=PACKAGE))
         assert "PaydayBridgeKit" in listing.get("workspace", listing.get("project", {})).get("schemes", []), listing
         destination = f"platform=iOS Simulator,id={udid}"
         destinations = run("destinations", ["xcodebuild", "-scheme", "PaydayBridgeKit", "-showdestinations"],

@@ -78,6 +78,7 @@ with tempfile.TemporaryDirectory() as directory:
     assert "bootstatus-retry" in phase_names
     assert "tests" in phase_names
     budgets = {c[0]: c[2] for c in retry_calls}
+    assert budgets["schemes"] == 180
     assert budgets["bootstatus"] == 300 and budgets["bootstatus-retry"] == 180
 
     # Hung recovery shutdown is tolerated and the retry still happens:
