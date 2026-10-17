@@ -232,6 +232,9 @@ public actor WorksheetStore {
             try data.write(to: temporary, options: .withoutOverwriting)
             #endif
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: temporary.path)
+            #if os(iOS)
+            try FileManager.default.setAttributes([.protectionKey: FileProtectionType.complete], ofItemAtPath: temporary.path)
+            #endif
             try checkpoint?(.staged)
             let handle = try FileHandle(forWritingTo: temporary)
             defer { try? handle.close() }
