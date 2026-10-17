@@ -40,7 +40,8 @@ jobs:
 
   ios-build:
     name: iOS build + iPhone-only + toolchain pin
-    runs-on: macos-26
+    # Pin validation below remains exact; macos-15 booted this toolchain in seat-weave CI.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:
