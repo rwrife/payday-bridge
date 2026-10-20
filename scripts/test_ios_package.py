@@ -112,6 +112,13 @@ def main():
                       "-derivedDataPath", str(ROOT / "NativeTestDerivedData"),
                       "-resultBundlePath", str(ARTIFACTS / "PaydayBridgeKit.xcresult"),
                       "CODE_SIGNING_ALLOWED=NO", "test"], timeout=720, cwd=PACKAGE)
+        run("ui-tests", ["xcodebuild", "-project", str(ROOT / "PaydayBridge.xcodeproj"),
+                         "-scheme", "PaydayBridge", "-sdk", "iphonesimulator26.0",
+                         "-destination", destination, "-destination-timeout", "60",
+                         "-parallel-testing-enabled", "NO", "-configuration", "Debug",
+                         "-derivedDataPath", str(ROOT / "NativeTestDerivedData"),
+                         "-resultBundlePath", str(ARTIFACTS / "PaydayBridgeUI.xcresult"),
+                         "CODE_SIGNING_ALLOWED=NO", "test"], timeout=720, cwd=ROOT)
     finally:
         if created_udid:
             for name, command in [

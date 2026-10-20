@@ -163,7 +163,8 @@ struct ContentView: View {
     private func rows(_ plan: Worksheet) -> [BillRow] {
         let coverage = try? plan.coverage(from: plan.openingDate, days: 30)
         return plan.bills.flatMap { bill in
-            ((try? bill.occurrences(from: plan.openingDate, days: 30, overrides: plan.overrides)) ?? []).map { occurrence in
+            let related = plan.overrides.filter { $0.key.hasPrefix("\(bill.id.uuidString)/") }
+            return ((try? bill.occurrences(from: plan.openingDate, days: 30, overrides: related)) ?? []).map { occurrence in
                 BillRow(bill: bill, occurrence: occurrence,
                         warnings: coverage?.items.first(where: { $0.key == occurrence.key })?.warnings.map(\.rawValue).sorted() ?? [])
             }
@@ -227,8 +228,11 @@ private struct PlanEditor: View {
                     TextField("Bill name", text: $title).accessibilityIdentifier("editor.title")
                     Toggle("Amount unknown", isOn: $unknown).accessibilityIdentifier("editor.unknown")
                     Toggle("Repeats monthly", isOn: $monthly).accessibilityIdentifier("editor.monthly")
-                    if prior != nil {
-                        Text("Monthly date edits preview affected occurrences; paid overrides stay attached to their original month.")
+                    if let prior {
+                        Text("Preview (next 30 days): \(preview(for: prior))")
+                            .font(.footnote)
+                            .accessibilityIdentifier("editor.recurrencePreview")
+                        Text("Paid overrides stay attached to their original month when a monthly anchor moves.")
                             .font(.footnote)
                     }
                 }
@@ -266,6 +270,20 @@ private struct PlanEditor: View {
 
     private func dayToDate(_ d: CivilDate) -> Date {
         Calendar.current.date(from: DateComponents(year: d.year, month: d.month, day: d.day)) ?? .now
+    }
+
+    private func preview(for prior: Bill) -> String {
+        guard let plan else { return "No worksheet" }
+        let c = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        guard let due = try? CivilDate(year: c.year!, month: c.month!, day: c.day!) else { return "Choose a valid date" }
+        let candidate = Bill(id: prior.id, title: title, firstDue: due,
+                             recurrence: monthly ? .monthly : .once, amount: prior.amount)
+        let related = plan.overrides.filter { $0.key.hasPrefix("\(prior.id.uuidString)/") }
+        guard let occurrences = try? candidate.occurrences(from: plan.openingDate, days: 30, overrides: related) else {
+            return "Cannot change recurrence while old paid overrides exist; keep monthly or review the saved months first."
+        }
+        if occurrences.isEmpty { return "No bills in next 30 days" }
+        return occurrences.map { "\(dateText($0.due))\($0.paid ? " (paid)" : "")" }.joined(separator: ", ")
     }
 
     private func submit() {
