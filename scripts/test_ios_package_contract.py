@@ -52,7 +52,9 @@ with tempfile.TemporaryDirectory() as directory:
             if name == "schemes":
                 return "2026-10-17 16:22:59.223 xcodebuild[10430:36594] [MT] IDERunDestination\n" + json.dumps({"workspace": {"schemes": ["PaydayBridgeKit"]}})
             if name == "destinations":
-                return "created existing"
+                # Real SwiftPM output lists placeholder rows, never concrete UDIDs.
+                return ("\t\t{ platform:iOS Simulator, id:dvtdevice-DVTiOSDeviceSimulatorPlaceholder-"
+                        "iphonesimulator:placeholder, name:Any iOS Simulator Device }")
             return ""
         m.run = fake
         try:

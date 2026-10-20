@@ -99,8 +99,13 @@ def main():
         destination = f"platform=iOS Simulator,id={udid}"
         destinations = run("destinations", ["xcodebuild", "-scheme", "PaydayBridgeKit", "-showdestinations"],
             timeout=120, cwd=PACKAGE)
-        if udid not in destinations:
-            raise RuntimeError("Selected iPhone is not a supported PaydayBridgeKit test destination")
+        # SwiftPM scheme listing only enumerates "Any iOS Simulator Device"
+        # placeholders, never concrete UDIDs (run 39417118833), so a UDID
+        # membership check can never pass. Require the concrete simulator
+        # platform to be an eligible destination; the test run below with the
+        # explicit UDID is the real proof.
+        if "platform:iOS Simulator" not in destinations:
+            raise RuntimeError("PaydayBridgeKit scheme lists no iOS Simulator destination; see destinations.log")
         run("tests", ["xcodebuild", "-scheme", "PaydayBridgeKit", "-sdk", "iphonesimulator26.0",
                       "-destination", destination, "-destination-timeout", "60",
                       "-parallel-testing-enabled", "NO", "-configuration", "Debug",
