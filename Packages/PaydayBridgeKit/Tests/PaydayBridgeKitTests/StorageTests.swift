@@ -76,7 +76,14 @@ final class StorageTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(permissions?.intValue, 0o600)
         #if os(iOS)
         let protection = try FileManager.default.attributesOfItem(atPath: url.path)[.protectionKey] as? FileProtectionType
+        #if targetEnvironment(simulator)
+        // The simulator's host filesystem does not report data-protection classes
+        // (attribute reads back nil, observed in CI). Writes above still request
+        // .complete and must not throw; enforcement needs physical-device validation.
+        XCTAssertTrue(protection == nil || protection == .complete)
+        #else
         XCTAssertEqual(protection, .complete)
+        #endif
         #endif
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path).filter { $0.hasSuffix(".tmp") }, [])
     }
