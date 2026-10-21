@@ -71,6 +71,9 @@ with tempfile.TemporaryDirectory() as directory:
     assert not any(c[0] == "create" for c in calls)
     command = next(c[1] for c in calls if c[0] == "tests")
     assert "platform=iOS Simulator,id=existing" in command and "-only-testing" not in command
+    ui_command = next(c[1] for c in calls if c[0] == "ui-tests")
+    assert "platform=iOS Simulator,id=existing" in ui_command
+    assert "PaydayBridge.xcodeproj" in ui_command[2]
 
     # One bootstatus stall recovers via shutdown + retry:
     retry_calls = scenario([existing], stall_bootstatus=1)

@@ -102,7 +102,7 @@ jobs:
           set -euo pipefail
           PROJECT=PaydayBridge.xcodeproj/project.pbxproj
           count=$(grep -c 'TARGETED_DEVICE_FAMILY = 1;' "$PROJECT")
-          [ "$count" -eq 4 ] || { echo "::error::Expected 4 iPhone-only settings (2 project + 2 app); found $count"; exit 1; }
+          [ "$count" -ge 4 ] || { echo "::error::Expected >= 4 iPhone-only settings; found $count"; exit 1; }
           if grep -E 'TARGETED_DEVICE_FAMILY = [^1;]' "$PROJECT"; then
             echo "::error::Non-iPhone TARGETED_DEVICE_FAMILY found"
             exit 1
@@ -131,8 +131,8 @@ jobs:
             echo "Runtime installed: $RUNTIME_ID"
           fi
 
-      - name: Test package on concrete iPhone simulator
-        timeout-minutes: 30
+      - name: Test package and UI on concrete iPhone simulator
+        timeout-minutes: 50
         run: python3 scripts/test_ios_package.py
 
       - name: Build for iphonesimulator

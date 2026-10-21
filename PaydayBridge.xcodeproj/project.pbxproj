@@ -10,8 +10,19 @@
 		AA00000000000000000000B0 /* PaydayBridgeKit in PaydayBridgeKit */ = {isa = PBXBuildFile; productRef = AA00000000000000000000AF /* PaydayBridgeKit */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		BB00000000000000000000D4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA00000000000000000000A1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA00000000000000000000A2;
+			remoteInfo = PaydayBridge;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		AA00000000000000000000B1 /* PaydayBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PaydayBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB00000000000000000000B1 /* PaydayBridgeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PaydayBridgeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA00000000000000000000B3 /* toolchain.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = toolchain.json; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -26,6 +37,18 @@
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section for UI tests */
+		BB00000000000000000000AC /* PaydayBridgeUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = PaydayBridgeUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section for UI tests */
 
 /* Begin PBXFrameworksBuildPhase section */
 		AA00000000000000000000AA /* Frameworks */ = {
@@ -43,6 +66,7 @@
 			isa = PBXGroup;
 			children = (
 				AA00000000000000000000AC /* PaydayBridge */,
+				BB00000000000000000000AC /* PaydayBridgeUITests */,
 				AA00000000000000000000B3 /* toolchain.json */,
 				AA00000000000000000000B2 /* Products */,
 			);
@@ -52,6 +76,7 @@
 			isa = PBXGroup;
 			children = (
 				AA00000000000000000000B1 /* PaydayBridge.app */,
+				BB00000000000000000000B1 /* PaydayBridgeUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -59,6 +84,25 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		BB00000000000000000000A2 /* PaydayBridgeUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB00000000000000000000A4 /* Build configuration list for PBXNativeTarget "PaydayBridgeUITests" */;
+			buildPhases = (
+				BB00000000000000000000A9 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BB00000000000000000000D3 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				BB00000000000000000000AC /* PaydayBridgeUITests */,
+			);
+			name = PaydayBridgeUITests;
+			productName = PaydayBridgeUITests;
+			productReference = BB00000000000000000000B1 /* PaydayBridgeUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		AA00000000000000000000A2 /* PaydayBridge */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = AA00000000000000000000A4 /* Build configuration list for PBXNativeTarget "PaydayBridge" */;
@@ -114,6 +158,7 @@
 			projectRoot = "";
 			targets = (
 				AA00000000000000000000A2 /* PaydayBridge */,
+				BB00000000000000000000A2 /* PaydayBridgeUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -136,7 +181,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BB00000000000000000000A9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		BB00000000000000000000D3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA00000000000000000000A2 /* PaydayBridge */;
+			targetProxy = BB00000000000000000000D4 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		AA00000000000000000000A5 /* Debug */ = {
@@ -270,6 +330,40 @@
 			};
 			name = Release;
 		};
+		BB00000000000000000000A7 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.infinityball.paydaybridge.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = PaydayBridge;
+			};
+			name = Debug;
+		};
+		BB00000000000000000000A8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.infinityball.paydaybridge.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = PaydayBridge;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -287,6 +381,15 @@
 			buildConfigurations = (
 				AA00000000000000000000A7 /* Debug */,
 				AA00000000000000000000A8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BB00000000000000000000A4 /* Build configuration list for PBXNativeTarget "PaydayBridgeUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB00000000000000000000A7 /* Debug */,
+				BB00000000000000000000A8 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
