@@ -81,8 +81,13 @@ final class PaydayBridgeUITests: XCTestCase {
         XCTAssertEqual(savedMode.label, "Saved plan — draft available")
 
         // 7. Destructive delete asks for confirmation first.
-        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Delete Rent")).firstMatch.tap()
-        app.buttons["Delete bill"].tap()
+        let deleteRent = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Delete Rent")).firstMatch
+        for _ in 0..<8 where !deleteRent.exists { app.swipeUp() }
+        XCTAssertTrue(deleteRent.waitForExistence(timeout: 10))
+        deleteRent.tap()
+        let confirmDelete = app.buttons.matching(NSPredicate(format: "label == %@", "Delete bill")).firstMatch
+        XCTAssertTrue(confirmDelete.waitForExistence(timeout: 10))
+        confirmDelete.tap()
         XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Edit Rent")).firstMatch.exists)
 
         // 8. Restart: data reloads from the device container.

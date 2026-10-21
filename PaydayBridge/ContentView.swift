@@ -72,6 +72,7 @@ struct ContentView: View {
                                 .accessibilityIdentifier("plan.paid.\(row.occurrence.key)")
                                 Button("Edit \(row.bill.title)") { editor = .bill(row.bill.id) }
                                 Button("Delete \(row.bill.title)", role: .destructive) { deleteID = row.bill.id }
+                                    .buttonStyle(.borderless) // ponytail: row-local action; split row if more controls land.
                             }
                         }
                         Button("Add bill") { editor = .bill(nil) }.accessibilityIdentifier("plan.addBill")
