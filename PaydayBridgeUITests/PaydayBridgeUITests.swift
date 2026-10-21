@@ -21,16 +21,20 @@ final class PaydayBridgeUITests: XCTestCase {
 
         // 2. Add confirmed income dated today.
         app.buttons["plan.addIncome"].tap()
-        app.textFields["editor.amount"].waitAndTap()
-        app.keyboards.textFields.firstMatch.typeText("500.00")
+        app.buttons["editor.status"].tap()
+        app.buttons["Confirmed estimate"].tap()
+        let incomeAmount = app.textFields["editor.amount"]
+        incomeAmount.waitAndTap()
+        incomeAmount.typeText("500.00")
         app.buttons["editor.save"].tap()
 
         // 3. Add a monthly bill with an unknown amount.
         app.buttons["plan.addBill"].tap()
-        app.textFields["editor.title"].waitAndTap()
-        app.keyboards.textFields.firstMatch.typeText("Rent")
         app.switches["editor.unknown"].switches.firstMatch.tap()
         app.switches["editor.monthly"].switches.firstMatch.tap()
+        let billTitle = app.textFields["editor.title"]
+        billTitle.waitAndTap()
+        billTitle.typeText("Rent")
         app.buttons["editor.save"].tap()
         let warning = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH %@", "plan.warning.")).firstMatch
         XCTAssertTrue(warning.waitForExistence(timeout: 10))
