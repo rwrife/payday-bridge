@@ -75,7 +75,10 @@ final class PaydayBridgeUITests: XCTestCase {
         for _ in 0..<8 where !toggleDraft.exists { app.swipeUp() }
         XCTAssertTrue(toggleDraft.waitForExistence(timeout: 10))
         toggleDraft.tap()
-        XCTAssertEqual(app.staticTexts["plan.mode"].label, "Saved plan — draft available")
+        let savedMode = app.staticTexts["plan.mode"]
+        for _ in 0..<8 where !savedMode.exists { app.swipeDown() }
+        XCTAssertTrue(savedMode.waitForExistence(timeout: 10))
+        XCTAssertEqual(savedMode.label, "Saved plan — draft available")
 
         // 7. Destructive delete asks for confirmation first.
         app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Delete Rent")).firstMatch.tap()
