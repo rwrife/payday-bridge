@@ -42,6 +42,7 @@ final class PaydayBridgeUITests: XCTestCase {
         XCTAssertTrue(warning.label.contains("unassigned"))
 
         // 4. Assign the bill to the confirmed income (late/expected explanation appears).
+        dismissKeyboard()
         let funding = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "plan.funding.")).firstMatch
         XCTAssertTrue(funding.waitForExistence(timeout: 10))
         funding.tap()
@@ -49,12 +50,15 @@ final class PaydayBridgeUITests: XCTestCase {
         XCTAssertTrue(confirmed.waitForExistence(timeout: 10))
         confirmed.tap()
 
-        // 5. Mark paid, then undo. Query the merged row switch, not the row.
-        let paidButton = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Mark paid")).firstMatch
+        // 5. Mark paid, then undo.
+        dismissKeyboard()
+        let paidButton = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "plan.paid.")).firstMatch
         XCTAssertTrue(paidButton.waitForExistence(timeout: 10))
         paidButton.tap()
-        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Undo paid")).firstMatch.waitForExistence(timeout: 10))
-        app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Undo paid")).firstMatch.tap()
+        XCTAssertTrue(paidButton.waitForExistence(timeout: 10))
+        XCTAssertEqual(paidButton.label, "Undo paid")
+        paidButton.tap()
+        XCTAssertEqual(paidButton.label, "Mark paid")
 
         // 6. Draft comparison: a what-if draft cannot mutate the saved plan.
         app.buttons["plan.beginDraft"].tap()
@@ -73,6 +77,11 @@ final class PaydayBridgeUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["plan.addBill"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Draft:")).firstMatch.exists)
+    }
+    private func dismissKeyboard() {
+        if app.keyboards.firstMatch.exists {
+            app.navigationBars.firstMatch.tap()
+        }
     }
 }
 
