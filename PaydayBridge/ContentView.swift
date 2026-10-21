@@ -67,7 +67,9 @@ struct ContentView: View {
                                         overrides[row.occurrence.key] = value
                                         return copy(current, overrides: overrides)
                                     }
-                                }.accessibilityIdentifier("plan.paid.\(row.occurrence.key)")
+                                }
+                                .buttonStyle(.borderless) // ponytail: row-local buttons only; use separate rows if controls grow.
+                                .accessibilityIdentifier("plan.paid.\(row.occurrence.key)")
                                 Button("Edit \(row.bill.title)") { editor = .bill(row.bill.id) }
                                 Button("Delete \(row.bill.title)", role: .destructive) { deleteID = row.bill.id }
                             }

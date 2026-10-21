@@ -3,6 +3,7 @@ import XCTest
 /// Journey for issue #4. XCUITest cannot read Application Support on the
 /// simulator, so persistence is proven by relaunch (same installed app data),
 /// not by inspecting files from the test process.
+@MainActor
 final class PaydayBridgeUITests: XCTestCase {
     private var app: XCUIApplication!
 
@@ -55,11 +56,13 @@ final class PaydayBridgeUITests: XCTestCase {
         let paidButton = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "plan.paid.")).firstMatch
         XCTAssertTrue(paidButton.waitForExistence(timeout: 10))
         paidButton.tap()
-        let undo = app.buttons.matching(NSPredicate(format: "label == %@", "Undo paid")).firstMatch
-        XCTAssertTrue(undo.waitForExistence(timeout: 10))
-        undo.tap()
-        let unpaid = app.buttons.matching(NSPredicate(format: "label == %@", "Mark paid")).firstMatch
-        XCTAssertTrue(unpaid.waitForExistence(timeout: 10))
+        let undo = NSPredicate(format: "label == %@", "Undo paid")
+        expectation(for: undo, evaluatedWith: paidButton)
+        waitForExpectations(timeout: 10)
+        paidButton.tap()
+        let unpaid = NSPredicate(format: "label == %@", "Mark paid")
+        expectation(for: unpaid, evaluatedWith: paidButton)
+        waitForExpectations(timeout: 10)
 
         // 6. Draft comparison: a what-if draft cannot mutate the saved plan.
         app.buttons["plan.beginDraft"].tap()
