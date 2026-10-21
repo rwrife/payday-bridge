@@ -129,15 +129,15 @@ struct ContentView: View {
             case .loaded(let loaded): snapshot = loaded
             case .recovery(let failure): error = failure.recoveryAction
             }
-        } catch { error = "Storage unavailable. Keep existing data and retry after unlocking device." }
+        } catch { self.error = "Storage unavailable. Keep existing data and retry after unlocking device." }
     }
 
     private func action(_ operation: @escaping @Sendable (WorksheetStore, WorksheetSnapshot?) async throws -> WorksheetSnapshot) {
         guard let store else { return }
         Task {
             do { snapshot = try await operation(store, snapshot) }
-            catch let failure as StorageFailure { error = failure.recoveryAction }
-            catch { error = "Save failed. Existing data remains on device." }
+            catch let failure as StorageFailure { self.error = failure.recoveryAction }
+            catch { self.error = "Save failed. Existing data remains on device." }
         }
     }
 
