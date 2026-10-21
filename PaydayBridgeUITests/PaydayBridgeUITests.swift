@@ -88,7 +88,10 @@ final class PaydayBridgeUITests: XCTestCase {
         let confirmDelete = app.buttons.matching(NSPredicate(format: "label == %@", "Delete bill")).firstMatch
         XCTAssertTrue(confirmDelete.waitForExistence(timeout: 10))
         confirmDelete.tap()
-        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Edit Rent")).firstMatch.exists)
+        let editRent = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Edit Rent")).firstMatch
+        let deleted = NSPredicate(format: "exists == false")
+        expectation(for: deleted, evaluatedWith: editRent)
+        waitForExpectations(timeout: 10)
 
         // 8. Restart: data reloads from the device container.
         app.terminate()
