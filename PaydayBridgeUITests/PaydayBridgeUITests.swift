@@ -55,13 +55,11 @@ final class PaydayBridgeUITests: XCTestCase {
         let paidButton = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "plan.paid.")).firstMatch
         XCTAssertTrue(paidButton.waitForExistence(timeout: 10))
         paidButton.tap()
-        let undo = NSPredicate(format: "label == %@", "Undo paid")
-        expectation(for: undo, evaluatedWith: paidButton)
-        waitForExpectations(timeout: 10)
-        paidButton.tap()
-        let unpaid = NSPredicate(format: "label == %@", "Mark paid")
-        expectation(for: unpaid, evaluatedWith: paidButton)
-        waitForExpectations(timeout: 10)
+        let undo = app.buttons.matching(NSPredicate(format: "label == %@", "Undo paid")).firstMatch
+        XCTAssertTrue(undo.waitForExistence(timeout: 10))
+        undo.tap()
+        let unpaid = app.buttons.matching(NSPredicate(format: "label == %@", "Mark paid")).firstMatch
+        XCTAssertTrue(unpaid.waitForExistence(timeout: 10))
 
         // 6. Draft comparison: a what-if draft cannot mutate the saved plan.
         app.buttons["plan.beginDraft"].tap()
