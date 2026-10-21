@@ -65,10 +65,16 @@ final class PaydayBridgeUITests: XCTestCase {
         waitForExpectations(timeout: 10)
 
         // 6. Draft comparison: a what-if draft cannot mutate the saved plan.
-        app.buttons["plan.beginDraft"].tap()
+        let beginDraft = app.buttons["plan.beginDraft"]
+        for _ in 0..<8 where !beginDraft.exists { app.swipeUp() }
+        XCTAssertTrue(beginDraft.waitForExistence(timeout: 10))
+        beginDraft.tap()
         XCTAssertTrue(app.staticTexts["plan.mode"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.staticTexts["plan.mode"].label, "What-if draft — saved plan unchanged")
-        app.buttons["plan.toggleDraft"].tap()
+        let toggleDraft = app.buttons["plan.toggleDraft"]
+        for _ in 0..<8 where !toggleDraft.exists { app.swipeUp() }
+        XCTAssertTrue(toggleDraft.waitForExistence(timeout: 10))
+        toggleDraft.tap()
         XCTAssertEqual(app.staticTexts["plan.mode"].label, "Saved plan — draft available")
 
         // 7. Destructive delete asks for confirmation first.
