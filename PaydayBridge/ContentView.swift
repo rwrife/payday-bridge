@@ -5,24 +5,47 @@ import PaydayBridgeKit
 struct ContentView: View {
     @State private var store: WorksheetStore?
     @State private var snapshot: WorksheetSnapshot?
-    @State private var draftMode = false
+    @State private var selection = PaydayWorkspaceSelection()
     @State private var editor: Editor?
     @State private var error: String?
     @State private var deleteID: UUID?
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var spacing: CGFloat { typeSize.isAccessibilitySize ? 12 : 8 }
+    private var warningDescriptions: [String: String] {
+        ["unknownAmount": "Amount unknown; coverage cannot be confirmed",
+         "unassigned": "No funding assigned",
+         "expectedNotConfirmed": "Expected income does not count as confirmed coverage",
+         "fundingAfterDue": "Funding arrives after due date",
+         "overcommitted": "Assigned bills exceed confirmed funds",
+         "snapshotAlreadyIncluded": "Income already included in opening cash; cannot count twice"]
+    }
+
+    private func warningText(_ warnings: [String]) -> String {
+        warnings.isEmpty ? "No coverage warnings" : warnings.map { warningDescriptions[$0] ?? $0 }.joined(separator: ". ")
+    }
+
+    private func rowLabel(_ row: BillRow) -> String {
+        "\(row.bill.title), due \(dateText(row.occurrence.due)), "
+        + (row.occurrence.amount.map(moneyText) ?? "amount unknown")
+        + ", \(row.occurrence.paid ? "paid" : "unpaid"). \(warningText(row.warnings))"
+    }
 
     private var plan: Worksheet? {
         guard let snapshot else { return nil }
-        return draftMode ? snapshot.draft?.worksheet : snapshot.worksheet
+        return selection.draftMode ? snapshot.draft?.worksheet : snapshot.worksheet
     }
 
     var body: some View {
         NavigationStack {
             List {
                 if let plan {
+                    PaydayWorkspaceLayout(
+                    timeline: {
                     Section {
                         Text(PaydayBridgeKit.planningDisclaimer).font(.footnote)
                         if snapshot?.draft != nil {
-                            Text(draftMode ? "What-if draft — saved plan unchanged" : "Saved plan — draft available")
+                            Text(selection.draftMode ? "What-if draft — saved plan unchanged" : "Saved plan — draft available")
                                 .accessibilityIdentifier("plan.mode")
                         }
                     }
@@ -38,61 +61,81 @@ struct ContentView: View {
                     }
                     Section("Bills · next 30 days") {
                         ForEach(rows(plan), id: \.occurrence.key) { row in
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("\(row.bill.title) · \(dateText(row.occurrence.due))").font(.headline)
-                                Text(row.occurrence.amount.map(moneyText) ?? "Unknown amount")
-                                Text(row.warnings.isEmpty ? "No warnings" : row.warnings.joined(separator: ", "))
-                                    .font(.caption).accessibilityIdentifier("plan.warning.\(row.occurrence.key)")
-                                Picker("Funding for \(row.bill.title)", selection: Binding(
-                                    get: { envelopeID(plan.assignments[row.occurrence.key]) },
-                                    set: { choice in change { current in
-                                        var assignments = current.assignments
-                                        assignments[row.occurrence.key] = envelope(choice)
-                                        return copy(current, assignments: assignments)
-                                    } }
-                                )) {
-                                    Text("Unassigned").tag("none")
-                                    Text("Opening cash").tag("cash")
-                                    ForEach(plan.incomes, id: \.id) { income in
-                                        Text("\(dateText(income.date)) · \(income.status.rawValue) · \(moneyText(income.amount))")
-                                            .tag(income.id.uuidString)
-                                    }
+                            Button {
+                                selection.selectedOccurrenceKey = row.occurrence.key
+                            } label: {
+                                VStack(alignment: .leading, spacing: spacing) {
+                                    Text("\(row.bill.title) · \(dateText(row.occurrence.due))").font(.headline)
+                                    Text(row.occurrence.amount.map(moneyText) ?? "Unknown amount")
+                                    Text(warningText(row.warnings)).font(.body)
                                 }
-                                .accessibilityIdentifier("plan.funding.\(row.occurrence.key)")
-                                Button(row.occurrence.paid ? "Undo paid" : "Mark paid") {
-                                    change { current in
-                                        var overrides = current.overrides
-                                        var value = overrides[row.occurrence.key] ?? OccurrenceOverride()
-                                        value.paid = !row.occurrence.paid
-                                        overrides[row.occurrence.key] = value
-                                        return copy(current, overrides: overrides)
-                                    }
-                                }
-                                .buttonStyle(.borderless) // ponytail: row-local buttons only; use separate rows if controls grow.
-                                .accessibilityIdentifier("plan.paid.\(row.occurrence.key)")
-                                Button("Edit \(row.bill.title)") { editor = .bill(row.bill.id) }
-                                Button("Delete \(row.bill.title)", role: .destructive) { deleteID = row.bill.id }
-                                    .buttonStyle(.borderless) // ponytail: row-local action; split row if more controls land.
                             }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(rowLabel(row))
+                            .accessibilityHint("Show funding and paid controls")
+                            .accessibilityIdentifier("plan.bill.\(row.occurrence.key)")
+                            .paydayTouchTarget()
                         }
-                        Button("Add bill") { editor = .bill(nil) }.accessibilityIdentifier("plan.addBill")
+                        Button("Add bill") { editor = .bill(nil) }
+                            .accessibilityIdentifier("plan.addBill")
+                            .paydayTouchTarget()
                     }
-                    Section("What-if comparison") {
+                        },
+                        controls: {
+                            if let row = rows(plan).first(where: { $0.occurrence.key == selection.selectedOccurrenceKey }) {
+                                Section("Funding · \(row.bill.title)") {
+                                    Text(rowLabel(row)).accessibilityIdentifier("plan.selectedBill")
+                                    Picker("Funding for \(row.bill.title)", selection: Binding(
+                                        get: { envelopeID(plan.assignments[row.occurrence.key]) },
+                                        set: { choice in change { current in
+                                            var assignments = current.assignments
+                                            assignments[row.occurrence.key] = envelope(choice)
+                                            return copy(current, assignments: assignments)
+                                        } }
+                                    )) {
+                                        Text("Unassigned").tag("none")
+                                        Text("Opening cash").tag("cash")
+                                        ForEach(plan.incomes, id: \.id) { income in
+                                            Text("\(dateText(income.date)) · \(income.status == .confirmed ? "Confirmed estimate" : "Expected only") · \(moneyText(income.amount))")
+                                                .tag(income.id.uuidString)
+                                        }
+                                    }
+                                    .accessibilityIdentifier("plan.funding.\(row.occurrence.key)")
+                                    .paydayTouchTarget()
+                                    Button(row.occurrence.paid ? "Undo paid" : "Mark paid") {
+                                        change { current in
+                                            var overrides = current.overrides
+                                            var value = overrides[row.occurrence.key] ?? OccurrenceOverride()
+                                            value.paid = !row.occurrence.paid
+                                            overrides[row.occurrence.key] = value
+                                            return copy(current, overrides: overrides)
+                                        }
+                                    }
+                                    .accessibilityIdentifier("plan.paid.\(row.occurrence.key)")
+                                    .paydayTouchTarget()
+                                    Button("Edit \(row.bill.title)") { editor = .bill(row.bill.id) }
+                                        .paydayTouchTarget()
+                                    Button("Delete \(row.bill.title)", role: .destructive) { deleteID = row.bill.id }
+                                        .paydayTouchTarget()
+                                }
+                            }
+                            Section("What-if comparison") {
                         if let draft = snapshot?.draft {
                             Text("Saved: \(snapshot!.worksheet.bills.count) bills, \(snapshot!.worksheet.incomes.count) incomes")
                             Text("Draft: \(draft.worksheet.bills.count) bills, \(draft.worksheet.incomes.count) incomes")
-                            Button(draftMode ? "View saved plan" : "Edit what-if draft") { draftMode.toggle() }
+                            Button(selection.draftMode ? "View saved plan" : "Edit what-if draft") { selection.draftMode.toggle() }
                                 .accessibilityIdentifier("plan.toggleDraft")
-                            Button("Apply draft") { action { store, _ in try await store.applyDraft(id: draft.id) }; draftMode = false }
+                            Button("Apply draft") { action { store, _ in try await store.applyDraft(id: draft.id) }; selection.draftMode = false }
                                 .accessibilityIdentifier("plan.applyDraft")
-                            Button("Discard draft", role: .destructive) { action { store, _ in try await store.discardDraft(id: draft.id) }; draftMode = false }
+                            Button("Discard draft", role: .destructive) { action { store, _ in try await store.discardDraft(id: draft.id) }; selection.draftMode = false }
                         } else {
                             Button("Start what-if draft") {
                                 action { store, current in try await store.beginDraft(baseRevision: current!.revision) }
-                                draftMode = true
+                                selection.draftMode = true
                             }.accessibilityIdentifier("plan.beginDraft")
                         }
-                    }
+                            }
+                        })
                 } else {
                     Section {
                         Text("Manual estimates only. No bank access, network calls or financial advice.")
@@ -153,7 +196,7 @@ struct ContentView: View {
     }
 
     private func change(_ transform: @escaping @Sendable (Worksheet) -> Worksheet) {
-        let editing = draftMode
+        let editing = selection.draftMode
         action { store, current in
             guard let current else { throw StorageFailure.unreadable }
             if editing, let draft = current.draft {
