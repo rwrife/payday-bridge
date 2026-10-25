@@ -73,12 +73,14 @@ final class PaydayBridgeUITests: XCTestCase {
         // 5. Selecting the row moves funding/draft controls (workspace seam).
         row.tap()
         let selected = app.staticTexts["plan.selectedBill"]
-        XCTAssertTrue(selected.waitForExistence(timeout: 10))
+        for _ in 0..<10 where !selected.isHittable { app.swipeUp() }
+        XCTAssertTrue(selected.isHittable, "selected bill controls unreachable at AX5")
         XCTAssertTrue(selected.label.contains("Amount unknown"))
 
         // 6. Assign the bill to the confirmed income.
         let funding = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "plan.funding.")).firstMatch
-        XCTAssertTrue(funding.waitForExistence(timeout: 10))
+        for _ in 0..<10 where !funding.isHittable { app.swipeUp() }
+        XCTAssertTrue(funding.isHittable)
         funding.tap()
         let confirmed = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Confirmed estimate")).firstMatch
         XCTAssertTrue(confirmed.waitForExistence(timeout: 10))
@@ -102,8 +104,10 @@ final class PaydayBridgeUITests: XCTestCase {
         XCTAssertTrue(beginDraft.waitForExistence(timeout: 10))
         XCTAssertGreaterThanOrEqual(beginDraft.frame.height, 44)
         beginDraft.tap()
-        XCTAssertTrue(app.staticTexts["plan.mode"].waitForExistence(timeout: 10))
-        XCTAssertEqual(app.staticTexts["plan.mode"].label, "What-if draft — saved plan unchanged")
+        let draftMode = app.staticTexts["plan.mode"]
+        for _ in 0..<10 where !draftMode.isHittable { app.swipeDown() }
+        XCTAssertTrue(draftMode.isHittable)
+        XCTAssertEqual(draftMode.label, "What-if draft — saved plan unchanged")
         let toggleDraft = app.buttons["plan.toggleDraft"]
         for _ in 0..<8 where !toggleDraft.exists { app.swipeUp() }
         XCTAssertTrue(toggleDraft.waitForExistence(timeout: 10))
@@ -114,14 +118,19 @@ final class PaydayBridgeUITests: XCTestCase {
         XCTAssertEqual(savedMode.label, "Saved plan — draft available")
 
         // 9. Orientation reflows, selected bill and draft mode survive.
-        let rowAgain = firstBillRow()
-        rowAgain.tap()
-        XCTAssertTrue(app.staticTexts["plan.selectedBill"].waitForExistence(timeout: 10))
-        let selectedLabel = app.staticTexts["plan.selectedBill"].label
+        for _ in 0..<10 where !row.isHittable { app.swipeUp() }
+        XCTAssertTrue(row.isHittable)
+        row.tap()
+        for _ in 0..<10 where !selected.isHittable { app.swipeUp() }
+        XCTAssertTrue(selected.isHittable)
+        let selectedLabel = selected.label
         XCUIDevice.shared.orientation = .landscapeLeft
-        XCTAssertTrue(app.staticTexts["plan.selectedBill"].waitForExistence(timeout: 10))
-        XCTAssertEqual(app.staticTexts["plan.selectedBill"].label, selectedLabel)
-        XCTAssertEqual(app.staticTexts["plan.mode"].label, "Saved plan — draft available")
+        for _ in 0..<10 where !selected.isHittable { app.swipeUp() }
+        XCTAssertTrue(selected.isHittable)
+        XCTAssertEqual(selected.label, selectedLabel)
+        for _ in 0..<10 where !savedMode.isHittable { app.swipeDown() }
+        XCTAssertTrue(savedMode.isHittable)
+        XCTAssertEqual(savedMode.label, "Saved plan — draft available")
         XCUIDevice.shared.orientation = .portrait
 
         // 10. Destructive delete asks for confirmation first.
