@@ -149,8 +149,10 @@ final class PaydayBridgeUITests: XCTestCase {
         // 11. Restart: data reloads from the device container.
         app.terminate()
         app.launch()
-        XCTAssertTrue(app.buttons["plan.addBill"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Draft:")).firstMatch.exists)
+        XCTAssertTrue(hittable("plan.addBill").exists)
+        let draftSummary = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Draft:")).firstMatch
+        for _ in 0..<10 where !draftSummary.isHittable { app.swipeUp() }
+        XCTAssertTrue(draftSummary.isHittable)
     }
 
     private func dismissKeyboard() {
