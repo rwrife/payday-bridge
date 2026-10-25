@@ -22,14 +22,17 @@ final class PaydayBridgeUITests: XCTestCase {
         app.launch() // CI simulator starts with a fresh app container.
     }
 
-    private func createWorksheetWithConfirmedIncomeAndUnknownRent() {
-        let create = app.buttons["plan.create"]
-        XCTAssertTrue(create.waitForExistence(timeout: 10))
-        create.tap()
-        XCTAssertTrue(app.buttons["plan.addIncome"].waitForExistence(timeout: 10))
+    private func hittable(_ id: String) -> XCUIElement {
+        let element = app.buttons[id]
+        for _ in 0..<10 where !element.isHittable { app.swipeUp() }
+        XCTAssertTrue(element.isHittable, "\(id) unreachable in scroll view")
+        XCTAssertGreaterThanOrEqual(element.frame.height, 44)
+        return element
+    }
 
-        // Confirmed income dated today.
-        app.buttons["plan.addIncome"].tap()
+    private func createWorksheetWithConfirmedIncomeAndUnknownRent() {
+        hittable("plan.create").tap()
+        hittable("plan.addIncome").tap()
         app.buttons["editor.status"].tap()
         app.buttons["Confirmed estimate"].tap()
         let incomeAmount = app.textFields["editor.amount"]
@@ -38,11 +41,7 @@ final class PaydayBridgeUITests: XCTestCase {
         app.buttons["editor.save"].tap()
 
         // Monthly bill with an unknown amount.
-        let addBill = app.buttons["plan.addBill"]
-        for _ in 0..<10 where !addBill.isHittable { app.swipeUp() }
-        XCTAssertTrue(addBill.isHittable)
-        XCTAssertGreaterThanOrEqual(addBill.frame.height, 44)
-        addBill.tap()
+        hittable("plan.addBill").tap()
         app.switches["editor.unknown"].switches.firstMatch.tap()
         app.switches["editor.monthly"].switches.firstMatch.tap()
         let billTitle = app.textFields["editor.title"]
