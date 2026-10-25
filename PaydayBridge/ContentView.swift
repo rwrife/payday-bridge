@@ -51,113 +51,9 @@ struct ContentView: View {
             List {
                 if let plan {
                     PaydayWorkspaceLayout(
-                    timeline: {
-                    Section {
-                        Text(PaydayBridgeKit.planningDisclaimer).font(.footnote)
-                        if snapshot?.draft != nil {
-                            Text(selection.draftMode ? "What-if draft — saved plan unchanged" : "Saved plan — draft available")
-                                .accessibilityIdentifier("plan.mode")
-                        }
-                    }
-                    Section("Opening cash") {
-                        LabeledContent("As of \(dateText(plan.openingDate))", value: moneyText(plan.openingCash))
-                        Button("Edit opening cash") { editor = .cash }.accessibilityIdentifier("plan.editCash")
-                    }
-                    Section("Income — expected is not confirmed") {
-                        ForEach(plan.incomes, id: \.id) { income in
-                            Text("\(dateText(income.date)) · \(moneyText(income.amount)) · \(income.status == .confirmed ? "Confirmed estimate" : "Expected only")")
-                        }
-                        Button("Add income") { editor = .income }.accessibilityIdentifier("plan.addIncome")
-                    }
-                    Section("Bills · next 30 days") {
-                        ForEach(rows(plan), id: \.occurrence.key) { row in
-                            Button {
-                                selection.selectedOccurrenceKey = row.occurrence.key
-                            } label: {
-                                VStack(alignment: .leading, spacing: spacing) {
-                                    Text("\(row.bill.title) · \(dateText(row.occurrence.due))").font(.headline)
-                                    Text(row.occurrence.amount.map(moneyText) ?? "Unknown amount")
-                                    Text(warningText(row.warnings)).font(.body)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(rowLabel(row))
-                            .accessibilityHint("Show funding and paid controls")
-                            .accessibilityIdentifier("plan.bill.\(row.occurrence.key)")
-                            .paydayTouchTarget()
-                        }
-                        Button("Add bill") { editor = .bill(nil) }
-                            .accessibilityIdentifier("plan.addBill")
-                            .paydayTouchTarget()
-                    }
-                        },
-                        controls: {
-                            if let row = rows(plan).first(where: { $0.occurrence.key == selection.selectedOccurrenceKey }) {
-                                Section("Funding · \(row.bill.title)") {
-                                    Text(rowLabel(row)).accessibilityIdentifier("plan.selectedBill")
-                                    Picker("Funding for \(row.bill.title)", selection: Binding(
-                                        get: { envelopeID(plan.assignments[row.occurrence.key]) },
-                                        set: { choice in change { current in
-                                            var assignments = current.assignments
-                                            assignments[row.occurrence.key] = envelope(choice)
-                                            return copy(current, assignments: assignments)
-                                        } }
-                                    )) {
-                                        Text("Unassigned").tag("none")
-                                        Text("Opening cash").tag("cash")
-                                        ForEach(plan.incomes, id: \.id) { income in
-                                            Text("\(dateText(income.date)) · \(income.status == .confirmed ? "Confirmed estimate" : "Expected only") · \(moneyText(income.amount))")
-                                                .tag(income.id.uuidString)
-                                        }
-                                    }
-                                    .accessibilityIdentifier("plan.funding.\(row.occurrence.key)")
-                                    .paydayTouchTarget()
-                                    Button(row.occurrence.paid ? "Undo paid" : "Mark paid") {
-                                        change { current in
-                                            var overrides = current.overrides
-                                            var value = overrides[row.occurrence.key] ?? OccurrenceOverride()
-                                            value.paid = !row.occurrence.paid
-                                            overrides[row.occurrence.key] = value
-                                            return copy(current, overrides: overrides)
-                                        }
-                                    }
-                                    .accessibilityIdentifier("plan.paid.\(row.occurrence.key)")
-                                    .paydayTouchTarget()
-                                    Button("Edit \(row.bill.title)") { editor = .bill(row.bill.id) }
-                                        .paydayTouchTarget()
-                                    Button("Delete \(row.bill.title)", role: .destructive) { deleteID = row.bill.id }
-                                        .paydayTouchTarget()
-                                }
-                            }
-                            Section("What-if comparison") {
-                        if let draft = snapshot?.draft {
-                            Text("Saved: \(snapshot!.worksheet.bills.count) bills, \(snapshot!.worksheet.incomes.count) incomes")
-                            Text("Draft: \(draft.worksheet.bills.count) bills, \(draft.worksheet.incomes.count) incomes")
-                            Button(selection.draftMode ? "View saved plan" : "Edit what-if draft") { selection.draftMode.toggle() }
-                                .accessibilityIdentifier("plan.toggleDraft")
-                            Button("Apply draft") { action { store, _ in try await store.applyDraft(id: draft.id) }; selection.draftMode = false }
-                                .accessibilityIdentifier("plan.applyDraft")
-                            Button("Discard draft", role: .destructive) { action { store, _ in try await store.discardDraft(id: draft.id) }; selection.draftMode = false }
-                                .accessibilityIdentifier("plan.discardDraft")
-                        } else {
-                            Button("Start what-if draft") {
-                                action { store, current in try await store.beginDraft(baseRevision: current!.revision) }
-                                selection.draftMode = true
-                            }.accessibilityIdentifier("plan.beginDraft")
-                        }
-                            }
-                            Section("Backup & export") {
-                                Button("Export JSON backup") { exportBackup() }
-                                    .accessibilityIdentifier("plan.exportBackup")
-                                    .paydayTouchTarget()
-                                Button("Export worksheet CSV") { exportCSV() }
-                                    .accessibilityIdentifier("plan.exportCSV")
-                                    .paydayTouchTarget()
-                                Button("Restore backup…") { importing = true }
-                                    .accessibilityIdentifier("plan.restoreBackup")
-                                    .paydayTouchTarget()
-                            }
-                        })
+                        timeline: { timeline(plan) },
+                        controls: { controls(plan) }
+                    )
                 } else {
                     Section {
                         Text("Manual estimates only. No bank access, network calls or financial advice.")
@@ -218,6 +114,117 @@ struct ContentView: View {
                     deleteID = nil
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func timeline(_ plan: Worksheet) -> some View {
+        Section {
+            Text(PaydayBridgeKit.planningDisclaimer).font(.footnote)
+            if snapshot?.draft != nil {
+                Text(selection.draftMode ? "What-if draft — saved plan unchanged" : "Saved plan — draft available")
+                    .accessibilityIdentifier("plan.mode")
+            }
+        }
+        Section("Opening cash") {
+            LabeledContent("As of \(dateText(plan.openingDate))", value: moneyText(plan.openingCash))
+            Button("Edit opening cash") { editor = .cash }.accessibilityIdentifier("plan.editCash")
+        }
+        Section("Income — expected is not confirmed") {
+            ForEach(plan.incomes, id: \.id) { income in
+                Text("\(dateText(income.date)) · \(moneyText(income.amount)) · \(income.status == .confirmed ? "Confirmed estimate" : "Expected only")")
+            }
+            Button("Add income") { editor = .income }.accessibilityIdentifier("plan.addIncome")
+        }
+        Section("Bills · next 30 days") {
+            ForEach(rows(plan), id: \.occurrence.key) { row in
+                Button {
+                    selection.selectedOccurrenceKey = row.occurrence.key
+                } label: {
+                    VStack(alignment: .leading, spacing: spacing) {
+                        Text("\(row.bill.title) · \(dateText(row.occurrence.due))").font(.headline)
+                        Text(row.occurrence.amount.map(moneyText) ?? "Unknown amount")
+                        Text(warningText(row.warnings)).font(.body)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(rowLabel(row))
+                .accessibilityHint("Show funding and paid controls")
+                .accessibilityIdentifier("plan.bill.\(row.occurrence.key)")
+                .paydayTouchTarget()
+            }
+            Button("Add bill") { editor = .bill(nil) }
+                .accessibilityIdentifier("plan.addBill")
+                .paydayTouchTarget()
+        }
+    }
+
+    @ViewBuilder
+    private func controls(_ plan: Worksheet) -> some View {
+        if let row = rows(plan).first(where: { $0.occurrence.key == selection.selectedOccurrenceKey }) {
+            Section("Funding · \(row.bill.title)") {
+                Text(rowLabel(row)).accessibilityIdentifier("plan.selectedBill")
+                Picker("Funding for \(row.bill.title)", selection: Binding(
+                    get: { envelopeID(plan.assignments[row.occurrence.key]) },
+                    set: { choice in change { current in
+                        var assignments = current.assignments
+                        assignments[row.occurrence.key] = envelope(choice)
+                        return copy(current, assignments: assignments)
+                    } }
+                )) {
+                    Text("Unassigned").tag("none")
+                    Text("Opening cash").tag("cash")
+                    ForEach(plan.incomes, id: \.id) { income in
+                        Text("\(dateText(income.date)) · \(income.status == .confirmed ? "Confirmed estimate" : "Expected only") · \(moneyText(income.amount))")
+                            .tag(income.id.uuidString)
+                    }
+                }
+                .accessibilityIdentifier("plan.funding.\(row.occurrence.key)")
+                .paydayTouchTarget()
+                Button(row.occurrence.paid ? "Undo paid" : "Mark paid") {
+                    change { current in
+                        var overrides = current.overrides
+                        var value = overrides[row.occurrence.key] ?? OccurrenceOverride()
+                        value.paid = !row.occurrence.paid
+                        overrides[row.occurrence.key] = value
+                        return copy(current, overrides: overrides)
+                    }
+                }
+                .accessibilityIdentifier("plan.paid.\(row.occurrence.key)")
+                .paydayTouchTarget()
+                Button("Edit \(row.bill.title)") { editor = .bill(row.bill.id) }
+                    .paydayTouchTarget()
+                Button("Delete \(row.bill.title)", role: .destructive) { deleteID = row.bill.id }
+                    .paydayTouchTarget()
+            }
+        }
+        Section("What-if comparison") {
+            if let draft = snapshot?.draft {
+                Text("Saved: \(snapshot!.worksheet.bills.count) bills, \(snapshot!.worksheet.incomes.count) incomes")
+                Text("Draft: \(draft.worksheet.bills.count) bills, \(draft.worksheet.incomes.count) incomes")
+                Button(selection.draftMode ? "View saved plan" : "Edit what-if draft") { selection.draftMode.toggle() }
+                    .accessibilityIdentifier("plan.toggleDraft")
+                Button("Apply draft") { action { store, _ in try await store.applyDraft(id: draft.id) }; selection.draftMode = false }
+                    .accessibilityIdentifier("plan.applyDraft")
+                Button("Discard draft", role: .destructive) { action { store, _ in try await store.discardDraft(id: draft.id) }; selection.draftMode = false }
+                    .accessibilityIdentifier("plan.discardDraft")
+            } else {
+                Button("Start what-if draft") {
+                    action { store, current in try await store.beginDraft(baseRevision: current!.revision) }
+                    selection.draftMode = true
+                }.accessibilityIdentifier("plan.beginDraft")
+            }
+        }
+        Section("Backup & export") {
+            Button("Export JSON backup") { exportBackup() }
+                .accessibilityIdentifier("plan.exportBackup")
+                .paydayTouchTarget()
+            Button("Export worksheet CSV") { exportCSV() }
+                .accessibilityIdentifier("plan.exportCSV")
+                .paydayTouchTarget()
+            Button("Restore backup…") { importing = true }
+                .accessibilityIdentifier("plan.restoreBackup")
+                .paydayTouchTarget()
         }
     }
 
