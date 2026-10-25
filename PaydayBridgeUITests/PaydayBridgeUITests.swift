@@ -153,6 +153,32 @@ final class PaydayBridgeUITests: XCTestCase {
         let draftSummary = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Draft:")).firstMatch
         for _ in 0..<10 where !draftSummary.isHittable { app.swipeUp() }
         XCTAssertTrue(draftSummary.isHittable)
+
+        // 12. Backup/CSV export previews sensitive data before any share action.
+        let exportBackup = app.buttons["plan.exportBackup"]
+        for _ in 0..<10 where !exportBackup.isHittable { app.swipeUp() }
+        XCTAssertTrue(exportBackup.isHittable)
+        XCTAssertGreaterThanOrEqual(exportBackup.frame.height, 44)
+        exportBackup.tap()
+        let exportAlert = app.alerts["Sensitive planning data preview"]
+        XCTAssertTrue(exportAlert.waitForExistence(timeout: 10))
+        XCTAssertTrue(exportAlert.staticTexts.firstMatch.label.contains("bills"))
+        exportAlert.buttons["Cancel"].tap()
+
+        let exportCSV = app.buttons["plan.exportCSV"]
+        for _ in 0..<10 where !exportCSV.isHittable { app.swipeUp() }
+        XCTAssertTrue(exportCSV.isHittable)
+        XCTAssertGreaterThanOrEqual(exportCSV.frame.height, 44)
+        exportCSV.tap()
+        let csvAlert = app.alerts["Sensitive planning data preview"]
+        XCTAssertTrue(csvAlert.waitForExistence(timeout: 10))
+        XCTAssertTrue(csvAlert.staticTexts.firstMatch.label.contains("90-day CSV"))
+        csvAlert.buttons["Cancel"].tap()
+
+        let restoreBackup = app.buttons["plan.restoreBackup"]
+        for _ in 0..<10 where !restoreBackup.isHittable { app.swipeUp() }
+        XCTAssertTrue(restoreBackup.isHittable)
+        XCTAssertGreaterThanOrEqual(restoreBackup.frame.height, 44)
     }
 
     private func dismissKeyboard() {

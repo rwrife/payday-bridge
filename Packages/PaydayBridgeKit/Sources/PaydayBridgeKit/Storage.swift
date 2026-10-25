@@ -173,6 +173,26 @@ public actor WorksheetStore {
         }
     }
 
+    /// Preview and current revision must still match when replacement begins.
+    /// A protected recovery sibling is written first through the same atomic
+    /// writer as the live plan. Failure before live rename leaves old bytes.
+    /// A post-rename durability failure reports uncertainty, never "old saved".
+    @discardableResult
+    public func restore(_ data: Data, preview: WorksheetBackupPreview, expectedRevision: UUID?) throws -> WorksheetSnapshot {
+        let imported = try WorksheetSnapshot.decode(data)
+        guard data == (try preview.snapshot.backupData()) else { throw StorageFailure.invalidData }
+        return try transaction {
+            let current = try read()
+            guard current?.revision == expectedRevision else { throw StorageFailure.revisionConflict }
+            if let current { try write(current, to: fileURL.deletingLastPathComponent().appendingPathComponent("worksheet-recovery.json")) }
+            let next = WorksheetSnapshot(worksheet: imported.worksheet, draft: imported.draft.map {
+                WhatIfDraft(id: UUID(), baseRevision: UUID(), worksheet: $0.worksheet)
+            })
+            try write(next)
+            return next
+        }
+    }
+
     private func existing() throws -> WorksheetSnapshot {
         guard let snapshot = try read() else { throw StorageFailure.revisionConflict }
         return snapshot
@@ -221,9 +241,11 @@ public actor WorksheetStore {
         return try operation()
     }
 
-    private func write(_ snapshot: WorksheetSnapshot) throws {
+    private func write(_ snapshot: WorksheetSnapshot) throws { try write(snapshot, to: fileURL) }
+
+    private func write(_ snapshot: WorksheetSnapshot, to destination: URL) throws {
         let data = try snapshot.encoded()
-        let temporary = fileURL.deletingLastPathComponent().appendingPathComponent(".worksheet-\(UUID().uuidString).tmp")
+        let temporary = destination.deletingLastPathComponent().appendingPathComponent(".worksheet-\(UUID().uuidString).tmp")
         defer { try? FileManager.default.removeItem(at: temporary) }
         do {
             #if os(iOS)
@@ -240,7 +262,7 @@ public actor WorksheetStore {
             defer { try? handle.close() }
             try handle.synchronize()
             try checkpoint?(.beforeReplace)
-            guard rename(temporary.path, fileURL.path) == 0 else { throw StorageFailure.writeFailed }
+            guard rename(temporary.path, destination.path) == 0 else { throw StorageFailure.writeFailed }
         } catch { throw StorageFailure.writeFailed }
         // Rename commits the snapshot. A later failure cannot claim the old snapshot
         // remains saved, but must report that crash durability is unconfirmed.

@@ -9,7 +9,17 @@ struct ContentView: View {
     @State private var editor: Editor?
     @State private var error: String?
     @State private var deleteID: UUID?
+    @State private var export: ExportPreview?
+    @State private var sharing: BackupFile?
+    @State private var preview: WorksheetBackupPreview?
+    @State private var previewData: Data?
+    @State private var importing = false
     @Environment(\.dynamicTypeSize) private var typeSize
+
+    /// Generated artifact staged in app container for the explicit share action.
+    struct BackupFile: Identifiable { let id = UUID(); let url: URL; let label: String }
+    /// Sensitive-data preview shown before any share action (issue #6).
+    struct ExportPreview: Identifiable { let id = UUID(); let file: BackupFile; let summary: String }
 
     private var spacing: CGFloat { typeSize.isAccessibilitySize ? 12 : 8 }
     private var warningDescriptions: [String: String] {
@@ -128,12 +138,24 @@ struct ContentView: View {
                             Button("Apply draft") { action { store, _ in try await store.applyDraft(id: draft.id) }; selection.draftMode = false }
                                 .accessibilityIdentifier("plan.applyDraft")
                             Button("Discard draft", role: .destructive) { action { store, _ in try await store.discardDraft(id: draft.id) }; selection.draftMode = false }
+                                .accessibilityIdentifier("plan.discardDraft")
                         } else {
                             Button("Start what-if draft") {
                                 action { store, current in try await store.beginDraft(baseRevision: current!.revision) }
                                 selection.draftMode = true
                             }.accessibilityIdentifier("plan.beginDraft")
                         }
+                            }
+                            Section("Backup & export") {
+                                Button("Export JSON backup") { exportBackup() }
+                                    .accessibilityIdentifier("plan.exportBackup")
+                                    .paydayTouchTarget()
+                                Button("Export worksheet CSV") { exportCSV() }
+                                    .accessibilityIdentifier("plan.exportCSV")
+                                    .paydayTouchTarget()
+                                Button("Restore backup…") { importing = true }
+                                    .accessibilityIdentifier("plan.restoreBackup")
+                                    .paydayTouchTarget()
                             }
                         })
                 } else {
@@ -147,6 +169,39 @@ struct ContentView: View {
             .task { if store == nil { await load() } }
             .sheet(item: $editor) { choice in
                 PlanEditor(choice: choice, plan: plan) { candidate in change { _ in candidate } }
+            }
+            .sheet(item: $sharing) { file in
+                ShareSheet(items: [file.url]).accessibilityIdentifier("share.sheet")
+            }
+            .alert("Sensitive planning data preview", isPresented: Binding(
+                get: { export != nil }, set: { if !$0 { export = nil } }
+            )) {
+                Button("Share…") {
+                    if let file = export?.file { sharing = file }
+                    export = nil
+                }.accessibilityIdentifier("plan.confirmShare")
+                Button("Cancel", role: .cancel) { export = nil }
+            } message: {
+                if let export {
+                    Text("\(export.summary)\n\nThis contains your financial estimates. No cloud account or tracking is used; you control where you send it.")
+                }
+            }
+            .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
+                switch result {
+                case .success(let url): stageImport(url)
+                case .failure: error = "Import was cancelled. Current data is unchanged."
+                }
+            }
+            .alert("Preview restore", isPresented: Binding(
+                get: { preview != nil }, set: { if !$0 { preview = nil; previewData = nil } }
+            )) {
+                Button("Replace current plan", role: .destructive) { confirmRestore() }
+                Button("Cancel", role: .cancel) { preview = nil; previewData = nil }
+            } message: {
+                if let preview {
+                    Text("Sensitive planning data. Restore \(preview.billCount) bills, \(preview.incomeCount) incomes"
+                         + "\(preview.hasDraft ? " and a what-if draft" : "") from \(preview.currency) backup dated \(preview.openingDate.description). Current plan will be kept in a recovery file.")
+                }
             }
             .alert("Worksheet unavailable", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
                 Button("OK") { error = nil }
@@ -216,7 +271,87 @@ struct ContentView: View {
             }
         }.sorted { $0.occurrence.due < $1.occurrence.due }
     }
+
+    private func stageFile(_ name: String, _ data: Data) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("PaydayBridgeExport", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let destination = directory.appendingPathComponent("\(UUID().uuidString)-\(name)")
+        try data.write(to: destination, options: [.atomic, .completeFileProtection])
+        try FileManager.default.setAttributes([.posixPermissions: 0o600, .protectionKey: FileProtectionType.complete], ofItemAtPath: destination.path)
+        return destination
+    }
+
+    private func exportBackup() {
+        guard let snapshot else { return }
+        do {
+            let data = try snapshot.backupData()
+            let url = try stageFile("payday-bridge-backup-\(dateText(snapshot.worksheet.openingDate)).json", data)
+            let file = BackupFile(url: url, label: "Payday Bridge JSON backup")
+            let summary = "JSON backup: \(snapshot.worksheet.bills.count) bills, \(snapshot.worksheet.incomes.count) incomes, opening cash \(moneyText(snapshot.worksheet.openingCash))"
+                + (snapshot.draft != nil ? ", plus one what-if draft." : ".")
+            export = ExportPreview(file: file, summary: summary)
+        } catch { self.error = "Could not create backup. Existing data remains saved." }
+    }
+
+    private func exportCSV() {
+        guard let plan else { return }
+        do {
+            let data = try plan.csvData(days: 90)
+            let url = try stageFile("payday-bridge-\(dateText(plan.openingDate)).csv", data)
+            let file = BackupFile(url: url, label: "Payday Bridge CSV")
+            let summary = "90-day CSV export: \(plan.bills.count) bills, \(plan.incomes.count) incomes, opening cash \(moneyText(plan.openingCash))."
+            export = ExportPreview(file: file, summary: summary)
+        } catch { self.error = "Could not export CSV. Existing data remains saved." }
+    }
+
+    private func stageImport(_ url: URL) {
+        do {
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+            let data = try Data(contentsOf: url)
+            let parsed = try WorksheetBackupPreview(data: data)
+            self.previewData = data
+            self.preview = parsed
+        } catch let failure as StorageFailure {
+            self.error = failure.recoveryAction
+        } catch {
+            self.error = "Unreadable backup file. Current data remains unchanged."
+        }
+    }
+
+    private func confirmRestore() {
+        guard let store, let preview, let data = previewData, let current = snapshot else { return }
+        Task {
+            do {
+                let restored = try await store.restore(data, preview: preview, expectedRevision: current.revision)
+                self.snapshot = restored
+                self.selection = PaydayWorkspaceSelection()
+                self.preview = nil
+                self.previewData = nil
+            } catch let failure as StorageFailure {
+                self.error = failure.recoveryAction
+            } catch {
+                self.error = "Restore failed. Previous plan remains in recovery file."
+            }
+        }
+    }
 }
+
+#if canImport(UIKit)
+import UIKit
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+#else
+struct ShareSheet: View {
+    let items: [Any]
+    var body: some View { Text("Share preview") }
+}
+#endif
 
 private struct BillRow {
     let bill: Bill
