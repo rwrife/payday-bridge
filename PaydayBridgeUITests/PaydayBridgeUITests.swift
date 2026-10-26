@@ -88,7 +88,8 @@ final class PaydayBridgeUITests: XCTestCase {
 
         // 7. Mark paid, then undo — proven through the selection summary label.
         let paidButton = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "plan.paid.")).firstMatch
-        XCTAssertTrue(paidButton.waitForExistence(timeout: 10))
+        for _ in 0..<10 where !paidButton.isHittable { app.swipeUp() }
+        XCTAssertTrue(paidButton.isHittable, "paid control unreachable after funding choice")
         paidButton.tap()
         let paid = NSPredicate(format: "label CONTAINS %@", ", paid.")
         expectation(for: paid, evaluatedWith: selected)
