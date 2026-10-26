@@ -47,7 +47,7 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationStack { deletionDialog(restoreAlert(exportAlert(workspace))) }
+        NavigationStack { deletionDialog(errorAlert(restoreAlert(exportAlert(workspace)))) }
     }
 
     private var workspace: some View {
@@ -93,19 +93,24 @@ struct ContentView: View {
         }
     }
 
+    private var restoreMessage: String {
+        guard let preview else { return "" }
+        let draft = preview.hasDraft ? " and a what-if draft" : ""
+        return "Sensitive planning data. Restore \(preview.billCount) bills, \(preview.incomeCount) incomes"
+            + "\(draft) from \(preview.currency) backup dated \(preview.openingDate.description). Current plan will be kept in a recovery file."
+    }
+
     private func restoreAlert<Content: View>(_ content: Content) -> some View {
         content.alert("Preview restore", isPresented: Binding(
             get: { preview != nil }, set: { if !$0 { preview = nil; previewData = nil } }
         )) {
             Button("Replace current plan", role: .destructive) { confirmRestore() }
             Button("Cancel", role: .cancel) { preview = nil; previewData = nil }
-        } message: {
-            if let preview {
-                Text("Sensitive planning data. Restore \(preview.billCount) bills, \(preview.incomeCount) incomes"
-                     + "\(preview.hasDraft ? " and a what-if draft" : "") from \(preview.currency) backup dated \(preview.openingDate.description). Current plan will be kept in a recovery file.")
-            }
-        }
-        .alert("Worksheet unavailable", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+        } message: { Text(restoreMessage) }
+    }
+
+    private func errorAlert<Content: View>(_ content: Content) -> some View {
+        content.alert("Worksheet unavailable", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK") { error = nil }
         } message: { Text(error ?? "Unknown error") }
     }
