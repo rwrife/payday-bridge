@@ -97,7 +97,7 @@ struct ContentView: View {
         guard let preview else { return "" }
         let draft = preview.hasDraft ? " and a what-if draft" : ""
         return "Sensitive planning data. Restore \(preview.billCount) bills, \(preview.incomeCount) incomes"
-            + "\(draft) from \(preview.currency) backup dated \(preview.openingDate.description). Current plan will be kept in a recovery file."
+            + "\(draft) from \(preview.currency) backup dated \(dateText(preview.openingDate)). Current plan will be kept in a recovery file."
     }
 
     private func restoreAlert<Content: View>(_ content: Content) -> some View {
