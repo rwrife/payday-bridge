@@ -47,72 +47,80 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                if let plan {
-                    PaydayWorkspaceLayout(
-                        timeline: { timeline(plan) },
-                        controls: { controls(plan) }
-                    )
-                } else {
-                    Section {
-                        Text("Manual estimates only. No bank access, network calls or financial advice.")
-                        Button("Create worksheet") { create() }.accessibilityIdentifier("plan.create")
-                    }
+        NavigationStack { deletionDialog(restoreAlert(exportAlert(workspace))) }
+    }
+
+    private var workspace: some View {
+        List {
+            if let plan {
+                PaydayWorkspaceLayout(timeline: { timeline(plan) }, controls: { controls(plan) })
+            } else {
+                Section {
+                    Text("Manual estimates only. No bank access, network calls or financial advice.")
+                    Button("Create worksheet") { create() }.accessibilityIdentifier("plan.create")
                 }
             }
-            .navigationTitle("Payday Bridge")
-            .task { if store == nil { await load() } }
-            .sheet(item: $editor) { choice in
-                PlanEditor(choice: choice, plan: plan) { candidate in change { _ in candidate } }
+        }
+        .navigationTitle("Payday Bridge")
+        .task { if store == nil { await load() } }
+        .sheet(item: $editor) { choice in
+            PlanEditor(choice: choice, plan: plan) { candidate in change { _ in candidate } }
+        }
+        .sheet(item: $sharing) { file in
+            ShareSheet(items: [file.url]).accessibilityIdentifier("share.sheet")
+        }
+    }
+
+    private func exportAlert<Content: View>(_ content: Content) -> some View {
+        content.alert("Sensitive planning data preview", isPresented: Binding(
+            get: { export != nil }, set: { if !$0 { export = nil } }
+        )) {
+            Button("Share…") {
+                if let file = export?.file { sharing = file }
+                export = nil
+            }.accessibilityIdentifier("plan.confirmShare")
+            Button("Cancel", role: .cancel) { export = nil }
+        } message: {
+            if let export {
+                Text("\(export.summary)\n\nThis contains your financial estimates. No cloud account or tracking is used; you control where you send it.")
             }
-            .sheet(item: $sharing) { file in
-                ShareSheet(items: [file.url]).accessibilityIdentifier("share.sheet")
+        }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
+            switch result {
+            case .success(let url): stageImport(url)
+            case .failure: error = "Import was cancelled. Current data is unchanged."
             }
-            .alert("Sensitive planning data preview", isPresented: Binding(
-                get: { export != nil }, set: { if !$0 { export = nil } }
-            )) {
-                Button("Share…") {
-                    if let file = export?.file { sharing = file }
-                    export = nil
-                }.accessibilityIdentifier("plan.confirmShare")
-                Button("Cancel", role: .cancel) { export = nil }
-            } message: {
-                if let export {
-                    Text("\(export.summary)\n\nThis contains your financial estimates. No cloud account or tracking is used; you control where you send it.")
-                }
+        }
+    }
+
+    private func restoreAlert<Content: View>(_ content: Content) -> some View {
+        content.alert("Preview restore", isPresented: Binding(
+            get: { preview != nil }, set: { if !$0 { preview = nil; previewData = nil } }
+        )) {
+            Button("Replace current plan", role: .destructive) { confirmRestore() }
+            Button("Cancel", role: .cancel) { preview = nil; previewData = nil }
+        } message: {
+            if let preview {
+                Text("Sensitive planning data. Restore \(preview.billCount) bills, \(preview.incomeCount) incomes"
+                     + "\(preview.hasDraft ? " and a what-if draft" : "") from \(preview.currency) backup dated \(preview.openingDate.description). Current plan will be kept in a recovery file.")
             }
-            .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
-                switch result {
-                case .success(let url): stageImport(url)
-                case .failure: error = "Import was cancelled. Current data is unchanged."
-                }
-            }
-            .alert("Preview restore", isPresented: Binding(
-                get: { preview != nil }, set: { if !$0 { preview = nil; previewData = nil } }
-            )) {
-                Button("Replace current plan", role: .destructive) { confirmRestore() }
-                Button("Cancel", role: .cancel) { preview = nil; previewData = nil }
-            } message: {
-                if let preview {
-                    Text("Sensitive planning data. Restore \(preview.billCount) bills, \(preview.incomeCount) incomes"
-                         + "\(preview.hasDraft ? " and a what-if draft" : "") from \(preview.currency) backup dated \(preview.openingDate.description). Current plan will be kept in a recovery file.")
-                }
-            }
-            .alert("Worksheet unavailable", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-                Button("OK") { error = nil }
-            } message: { Text(error ?? "Unknown error") }
-            .confirmationDialog("Delete bill and funding assignments?", isPresented: Binding(
-                get: { deleteID != nil }, set: { if !$0 { deleteID = nil } }
-            ), titleVisibility: .visible) {
-                Button("Delete bill", role: .destructive) {
-                    guard let id = deleteID else { return }
-                    let prefix = "\(id.uuidString)/"
-                    change { current in copy(current, bills: current.bills.filter { $0.id != id },
-                                             overrides: current.overrides.filter { !$0.key.hasPrefix(prefix) },
-                                             assignments: current.assignments.filter { !$0.key.hasPrefix(prefix) }) }
-                    deleteID = nil
-                }
+        }
+        .alert("Worksheet unavailable", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            Button("OK") { error = nil }
+        } message: { Text(error ?? "Unknown error") }
+    }
+
+    private func deletionDialog<Content: View>(_ content: Content) -> some View {
+        content.confirmationDialog("Delete bill and funding assignments?", isPresented: Binding(
+            get: { deleteID != nil }, set: { if !$0 { deleteID = nil } }
+        ), titleVisibility: .visible) {
+            Button("Delete bill", role: .destructive) {
+                guard let id = deleteID else { return }
+                let prefix = "\(id.uuidString)/"
+                change { current in copy(current, bills: current.bills.filter { $0.id != id },
+                                         overrides: current.overrides.filter { !$0.key.hasPrefix(prefix) },
+                                         assignments: current.assignments.filter { !$0.key.hasPrefix(prefix) }) }
+                deleteID = nil
             }
         }
     }
