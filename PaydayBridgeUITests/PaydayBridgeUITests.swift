@@ -163,7 +163,7 @@ final class PaydayBridgeUITests: XCTestCase {
         exportBackup.tap()
         let exportAlert = app.alerts["Sensitive planning data preview"]
         XCTAssertTrue(exportAlert.waitForExistence(timeout: 10))
-        XCTAssertTrue(exportAlert.staticTexts.firstMatch.label.contains("bills"))
+        XCTAssertTrue(exportAlert.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "bills")).firstMatch.exists)
         exportAlert.buttons["Cancel"].tap()
 
         let exportCSV = app.buttons["plan.exportCSV"]
@@ -173,7 +173,7 @@ final class PaydayBridgeUITests: XCTestCase {
         exportCSV.tap()
         let csvAlert = app.alerts["Sensitive planning data preview"]
         XCTAssertTrue(csvAlert.waitForExistence(timeout: 10))
-        XCTAssertTrue(csvAlert.staticTexts.firstMatch.label.contains("90-day CSV"))
+        XCTAssertTrue(csvAlert.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "90-day CSV")).firstMatch.exists)
         csvAlert.buttons["Cancel"].tap()
 
         let restoreBackup = app.buttons["plan.restoreBackup"]
