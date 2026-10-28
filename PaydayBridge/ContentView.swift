@@ -9,7 +9,17 @@ struct ContentView: View {
     @State private var editor: Editor?
     @State private var error: String?
     @State private var deleteID: UUID?
+    @State private var export: ExportPreview?
+    @State private var sharing: BackupFile?
+    @State private var preview: WorksheetBackupPreview?
+    @State private var previewData: Data?
+    @State private var importing = false
     @Environment(\.dynamicTypeSize) private var typeSize
+
+    /// Generated artifact staged in app container for the explicit share action.
+    struct BackupFile: Identifiable { let id = UUID(); let url: URL; let label: String }
+    /// Sensitive-data preview shown before any share action (issue #6).
+    struct ExportPreview: Identifiable { let id = UUID(); let file: BackupFile; let summary: String }
 
     private var spacing: CGFloat { typeSize.isAccessibilitySize ? 12 : 8 }
     private var warningDescriptions: [String: String] {
@@ -37,132 +47,197 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                if let plan {
-                    PaydayWorkspaceLayout(
-                    timeline: {
-                    Section {
-                        Text(PaydayBridgeKit.planningDisclaimer).font(.footnote)
-                        if snapshot?.draft != nil {
-                            Text(selection.draftMode ? "What-if draft — saved plan unchanged" : "Saved plan — draft available")
-                                .accessibilityIdentifier("plan.mode")
-                        }
-                    }
-                    Section("Opening cash") {
-                        LabeledContent("As of \(dateText(plan.openingDate))", value: moneyText(plan.openingCash))
-                        Button("Edit opening cash") { editor = .cash }.accessibilityIdentifier("plan.editCash")
-                    }
-                    Section("Income — expected is not confirmed") {
-                        ForEach(plan.incomes, id: \.id) { income in
-                            Text("\(dateText(income.date)) · \(moneyText(income.amount)) · \(income.status == .confirmed ? "Confirmed estimate" : "Expected only")")
-                        }
-                        Button("Add income") { editor = .income }.accessibilityIdentifier("plan.addIncome")
-                    }
-                    Section("Bills · next 30 days") {
-                        ForEach(rows(plan), id: \.occurrence.key) { row in
-                            Button {
-                                selection.selectedOccurrenceKey = row.occurrence.key
-                            } label: {
-                                VStack(alignment: .leading, spacing: spacing) {
-                                    Text("\(row.bill.title) · \(dateText(row.occurrence.due))").font(.headline)
-                                    Text(row.occurrence.amount.map(moneyText) ?? "Unknown amount")
-                                    Text(warningText(row.warnings)).font(.body)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(rowLabel(row))
-                            .accessibilityHint("Show funding and paid controls")
-                            .accessibilityIdentifier("plan.bill.\(row.occurrence.key)")
-                            .paydayTouchTarget()
-                        }
-                        Button("Add bill") { editor = .bill(nil) }
-                            .accessibilityIdentifier("plan.addBill")
-                            .paydayTouchTarget()
-                    }
-                        },
-                        controls: {
-                            if let row = rows(plan).first(where: { $0.occurrence.key == selection.selectedOccurrenceKey }) {
-                                Section("Funding · \(row.bill.title)") {
-                                    Text(rowLabel(row)).accessibilityIdentifier("plan.selectedBill")
-                                    Picker("Funding for \(row.bill.title)", selection: Binding(
-                                        get: { envelopeID(plan.assignments[row.occurrence.key]) },
-                                        set: { choice in change { current in
-                                            var assignments = current.assignments
-                                            assignments[row.occurrence.key] = envelope(choice)
-                                            return copy(current, assignments: assignments)
-                                        } }
-                                    )) {
-                                        Text("Unassigned").tag("none")
-                                        Text("Opening cash").tag("cash")
-                                        ForEach(plan.incomes, id: \.id) { income in
-                                            Text("\(dateText(income.date)) · \(income.status == .confirmed ? "Confirmed estimate" : "Expected only") · \(moneyText(income.amount))")
-                                                .tag(income.id.uuidString)
-                                        }
-                                    }
-                                    .accessibilityIdentifier("plan.funding.\(row.occurrence.key)")
-                                    .paydayTouchTarget()
-                                    Button(row.occurrence.paid ? "Undo paid" : "Mark paid") {
-                                        change { current in
-                                            var overrides = current.overrides
-                                            var value = overrides[row.occurrence.key] ?? OccurrenceOverride()
-                                            value.paid = !row.occurrence.paid
-                                            overrides[row.occurrence.key] = value
-                                            return copy(current, overrides: overrides)
-                                        }
-                                    }
-                                    .accessibilityIdentifier("plan.paid.\(row.occurrence.key)")
-                                    .paydayTouchTarget()
-                                    Button("Edit \(row.bill.title)") { editor = .bill(row.bill.id) }
-                                        .paydayTouchTarget()
-                                    Button("Delete \(row.bill.title)", role: .destructive) { deleteID = row.bill.id }
-                                        .paydayTouchTarget()
-                                }
-                            }
-                            Section("What-if comparison") {
-                        if let draft = snapshot?.draft {
-                            Text("Saved: \(snapshot!.worksheet.bills.count) bills, \(snapshot!.worksheet.incomes.count) incomes")
-                            Text("Draft: \(draft.worksheet.bills.count) bills, \(draft.worksheet.incomes.count) incomes")
-                            Button(selection.draftMode ? "View saved plan" : "Edit what-if draft") { selection.draftMode.toggle() }
-                                .accessibilityIdentifier("plan.toggleDraft")
-                            Button("Apply draft") { action { store, _ in try await store.applyDraft(id: draft.id) }; selection.draftMode = false }
-                                .accessibilityIdentifier("plan.applyDraft")
-                            Button("Discard draft", role: .destructive) { action { store, _ in try await store.discardDraft(id: draft.id) }; selection.draftMode = false }
-                        } else {
-                            Button("Start what-if draft") {
-                                action { store, current in try await store.beginDraft(baseRevision: current!.revision) }
-                                selection.draftMode = true
-                            }.accessibilityIdentifier("plan.beginDraft")
-                        }
-                            }
-                        })
-                } else {
-                    Section {
-                        Text("Manual estimates only. No bank access, network calls or financial advice.")
-                        Button("Create worksheet") { create() }.accessibilityIdentifier("plan.create")
-                    }
+        NavigationStack { deletionDialog(errorAlert(restoreAlert(exportAlert(workspace)))) }
+    }
+
+    private var workspace: some View {
+        List {
+            if let plan {
+                PaydayWorkspaceLayout(timeline: { timeline(plan) }, controls: { controls(plan) })
+            } else {
+                Section {
+                    Text("Manual estimates only. No bank access, network calls or financial advice.")
+                    Button("Create worksheet") { create() }.accessibilityIdentifier("plan.create")
                 }
             }
-            .navigationTitle("Payday Bridge")
-            .task { if store == nil { await load() } }
-            .sheet(item: $editor) { choice in
-                PlanEditor(choice: choice, plan: plan) { candidate in change { _ in candidate } }
+        }
+        .navigationTitle("Payday Bridge")
+        .task { if store == nil { await load() } }
+        .sheet(item: $editor) { choice in
+            PlanEditor(choice: choice, plan: plan) { candidate in change { _ in candidate } }
+        }
+        .sheet(item: $sharing) { file in
+            ShareSheet(items: [file.url]).accessibilityIdentifier("share.sheet")
+        }
+    }
+
+    private func exportAlert<Content: View>(_ content: Content) -> some View {
+        content.alert("Sensitive planning data preview", isPresented: Binding(
+            get: { export != nil }, set: { if !$0 { export = nil } }
+        )) {
+            Button("Share…") {
+                if let file = export?.file { sharing = file }
+                export = nil
+            }.accessibilityIdentifier("plan.confirmShare")
+            Button("Cancel", role: .cancel) { export = nil }
+        } message: {
+            if let export {
+                Text("\(export.summary)\n\nThis contains your financial estimates. No cloud account or tracking is used; you control where you send it.")
             }
-            .alert("Worksheet unavailable", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
-                Button("OK") { error = nil }
-            } message: { Text(error ?? "Unknown error") }
-            .confirmationDialog("Delete bill and funding assignments?", isPresented: Binding(
-                get: { deleteID != nil }, set: { if !$0 { deleteID = nil } }
-            ), titleVisibility: .visible) {
-                Button("Delete bill", role: .destructive) {
-                    guard let id = deleteID else { return }
-                    let prefix = "\(id.uuidString)/"
-                    change { current in copy(current, bills: current.bills.filter { $0.id != id },
-                                             overrides: current.overrides.filter { !$0.key.hasPrefix(prefix) },
-                                             assignments: current.assignments.filter { !$0.key.hasPrefix(prefix) }) }
-                    deleteID = nil
+        }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
+            switch result {
+            case .success(let url): stageImport(url)
+            case .failure: error = "Import was cancelled. Current data is unchanged."
+            }
+        }
+    }
+
+    private var restoreMessage: String {
+        guard let preview else { return "" }
+        let draft = preview.hasDraft ? " and a what-if draft" : ""
+        return "Sensitive planning data. Restore \(preview.billCount) bills, \(preview.incomeCount) incomes"
+            + "\(draft) from \(preview.currency) backup dated \(dateText(preview.openingDate)). Current plan will be kept in a recovery file."
+    }
+
+    private func restoreAlert<Content: View>(_ content: Content) -> some View {
+        content.alert("Preview restore", isPresented: Binding(
+            get: { preview != nil }, set: { if !$0 { preview = nil; previewData = nil } }
+        )) {
+            Button("Replace current plan", role: .destructive) { confirmRestore() }
+            Button("Cancel", role: .cancel) { preview = nil; previewData = nil }
+        } message: { Text(restoreMessage) }
+    }
+
+    private func errorAlert<Content: View>(_ content: Content) -> some View {
+        content.alert("Worksheet unavailable", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            Button("OK") { error = nil }
+        } message: { Text(error ?? "Unknown error") }
+    }
+
+    private func deletionDialog<Content: View>(_ content: Content) -> some View {
+        content.confirmationDialog("Delete bill and funding assignments?", isPresented: Binding(
+            get: { deleteID != nil }, set: { if !$0 { deleteID = nil } }
+        ), titleVisibility: .visible) {
+            Button("Delete bill", role: .destructive) {
+                guard let id = deleteID else { return }
+                let prefix = "\(id.uuidString)/"
+                change { current in copy(current, bills: current.bills.filter { $0.id != id },
+                                         overrides: current.overrides.filter { !$0.key.hasPrefix(prefix) },
+                                         assignments: current.assignments.filter { !$0.key.hasPrefix(prefix) }) }
+                deleteID = nil
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func timeline(_ plan: Worksheet) -> some View {
+        Section {
+            Text(PaydayBridgeKit.planningDisclaimer).font(.footnote)
+            if snapshot?.draft != nil {
+                Text(selection.draftMode ? "What-if draft — saved plan unchanged" : "Saved plan — draft available")
+                    .accessibilityIdentifier("plan.mode")
+            }
+        }
+        Section("Opening cash") {
+            LabeledContent("As of \(dateText(plan.openingDate))", value: moneyText(plan.openingCash))
+            Button("Edit opening cash") { editor = .cash }.accessibilityIdentifier("plan.editCash")
+        }
+        Section("Income — expected is not confirmed") {
+            ForEach(plan.incomes, id: \.id) { income in
+                Text("\(dateText(income.date)) · \(moneyText(income.amount)) · \(income.status == .confirmed ? "Confirmed estimate" : "Expected only")")
+            }
+            Button("Add income") { editor = .income }.accessibilityIdentifier("plan.addIncome")
+        }
+        Section("Bills · next 30 days") {
+            ForEach(rows(plan), id: \.occurrence.key) { row in
+                Button {
+                    selection.selectedOccurrenceKey = row.occurrence.key
+                } label: {
+                    VStack(alignment: .leading, spacing: spacing) {
+                        Text("\(row.bill.title) · \(dateText(row.occurrence.due))").font(.headline)
+                        Text(row.occurrence.amount.map(moneyText) ?? "Unknown amount")
+                        Text(warningText(row.warnings)).font(.body)
+                    }
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(rowLabel(row))
+                .accessibilityHint("Show funding and paid controls")
+                .accessibilityIdentifier("plan.bill.\(row.occurrence.key)")
+                .paydayTouchTarget()
             }
+            Button("Add bill") { editor = .bill(nil) }
+                .accessibilityIdentifier("plan.addBill")
+                .paydayTouchTarget()
+        }
+    }
+
+    @ViewBuilder
+    private func controls(_ plan: Worksheet) -> some View {
+        if let row = rows(plan).first(where: { $0.occurrence.key == selection.selectedOccurrenceKey }) {
+            Section("Funding · \(row.bill.title)") {
+                Text(rowLabel(row)).accessibilityIdentifier("plan.selectedBill")
+                Picker("Funding for \(row.bill.title)", selection: Binding(
+                    get: { envelopeID(plan.assignments[row.occurrence.key]) },
+                    set: { choice in change { current in
+                        var assignments = current.assignments
+                        assignments[row.occurrence.key] = envelope(choice)
+                        return copy(current, assignments: assignments)
+                    } }
+                )) {
+                    Text("Unassigned").tag("none")
+                    Text("Opening cash").tag("cash")
+                    ForEach(plan.incomes, id: \.id) { income in
+                        Text("\(dateText(income.date)) · \(income.status == .confirmed ? "Confirmed estimate" : "Expected only") · \(moneyText(income.amount))")
+                            .tag(income.id.uuidString)
+                    }
+                }
+                .accessibilityIdentifier("plan.funding.\(row.occurrence.key)")
+                .paydayTouchTarget()
+                Button(row.occurrence.paid ? "Undo paid" : "Mark paid") {
+                    change { current in
+                        var overrides = current.overrides
+                        var value = overrides[row.occurrence.key] ?? OccurrenceOverride()
+                        value.paid = !row.occurrence.paid
+                        overrides[row.occurrence.key] = value
+                        return copy(current, overrides: overrides)
+                    }
+                }
+                .accessibilityIdentifier("plan.paid.\(row.occurrence.key)")
+                .paydayTouchTarget()
+                Button("Edit \(row.bill.title)") { editor = .bill(row.bill.id) }
+                    .paydayTouchTarget()
+                Button("Delete \(row.bill.title)", role: .destructive) { deleteID = row.bill.id }
+                    .paydayTouchTarget()
+            }
+        }
+        Section("What-if comparison") {
+            if let draft = snapshot?.draft {
+                Text("Saved: \(snapshot!.worksheet.bills.count) bills, \(snapshot!.worksheet.incomes.count) incomes")
+                Text("Draft: \(draft.worksheet.bills.count) bills, \(draft.worksheet.incomes.count) incomes")
+                Button(selection.draftMode ? "View saved plan" : "Edit what-if draft") { selection.draftMode.toggle() }
+                    .accessibilityIdentifier("plan.toggleDraft")
+                Button("Apply draft") { action { store, _ in try await store.applyDraft(id: draft.id) }; selection.draftMode = false }
+                    .accessibilityIdentifier("plan.applyDraft")
+                Button("Discard draft", role: .destructive) { action { store, _ in try await store.discardDraft(id: draft.id) }; selection.draftMode = false }
+                    .accessibilityIdentifier("plan.discardDraft")
+            } else {
+                Button("Start what-if draft") {
+                    action { store, current in try await store.beginDraft(baseRevision: current!.revision) }
+                    selection.draftMode = true
+                }.accessibilityIdentifier("plan.beginDraft")
+            }
+        }
+        Section("Backup & export") {
+            Button("Export JSON backup") { exportBackup() }
+                .accessibilityIdentifier("plan.exportBackup")
+                .paydayTouchTarget()
+            Button("Export worksheet CSV") { exportCSV() }
+                .accessibilityIdentifier("plan.exportCSV")
+                .paydayTouchTarget()
+            Button("Restore backup…") { importing = true }
+                .accessibilityIdentifier("plan.restoreBackup")
+                .paydayTouchTarget()
         }
     }
 
@@ -216,7 +291,87 @@ struct ContentView: View {
             }
         }.sorted { $0.occurrence.due < $1.occurrence.due }
     }
+
+    private func stageFile(_ name: String, _ data: Data) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("PaydayBridgeExport", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let destination = directory.appendingPathComponent("\(UUID().uuidString)-\(name)")
+        try data.write(to: destination, options: [.atomic, .completeFileProtection])
+        try FileManager.default.setAttributes([.posixPermissions: 0o600, .protectionKey: FileProtectionType.complete], ofItemAtPath: destination.path)
+        return destination
+    }
+
+    private func exportBackup() {
+        guard let snapshot else { return }
+        do {
+            let data = try snapshot.backupData()
+            let url = try stageFile("payday-bridge-backup-\(dateText(snapshot.worksheet.openingDate)).json", data)
+            let file = BackupFile(url: url, label: "Payday Bridge JSON backup")
+            let summary = "JSON backup: \(snapshot.worksheet.bills.count) bills, \(snapshot.worksheet.incomes.count) incomes, opening cash \(moneyText(snapshot.worksheet.openingCash))"
+                + (snapshot.draft != nil ? ", plus one what-if draft." : ".")
+            export = ExportPreview(file: file, summary: summary)
+        } catch { self.error = "Could not create backup. Existing data remains saved." }
+    }
+
+    private func exportCSV() {
+        guard let plan else { return }
+        do {
+            let data = try plan.csvData(days: 90)
+            let url = try stageFile("payday-bridge-\(dateText(plan.openingDate)).csv", data)
+            let file = BackupFile(url: url, label: "Payday Bridge CSV")
+            let summary = "90-day CSV export: \(plan.bills.count) bills, \(plan.incomes.count) incomes, opening cash \(moneyText(plan.openingCash))."
+            export = ExportPreview(file: file, summary: summary)
+        } catch { self.error = "Could not export CSV. Existing data remains saved." }
+    }
+
+    private func stageImport(_ url: URL) {
+        do {
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+            let data = try Data(contentsOf: url)
+            let parsed = try WorksheetBackupPreview(data: data)
+            self.previewData = data
+            self.preview = parsed
+        } catch let failure as StorageFailure {
+            self.error = failure.recoveryAction
+        } catch {
+            self.error = "Unreadable backup file. Current data remains unchanged."
+        }
+    }
+
+    private func confirmRestore() {
+        guard let store, let preview, let data = previewData, let current = snapshot else { return }
+        Task {
+            do {
+                let restored = try await store.restore(data, preview: preview, expectedRevision: current.revision)
+                self.snapshot = restored
+                self.selection = PaydayWorkspaceSelection()
+                self.preview = nil
+                self.previewData = nil
+            } catch let failure as StorageFailure {
+                self.error = failure.recoveryAction
+            } catch {
+                self.error = "Restore failed. Previous plan remains in recovery file."
+            }
+        }
+    }
 }
+
+#if canImport(UIKit)
+import UIKit
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+#else
+struct ShareSheet: View {
+    let items: [Any]
+    var body: some View { Text("Share preview") }
+}
+#endif
 
 private struct BillRow {
     let bill: Bill

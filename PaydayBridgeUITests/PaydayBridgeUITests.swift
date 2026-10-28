@@ -88,7 +88,8 @@ final class PaydayBridgeUITests: XCTestCase {
 
         // 7. Mark paid, then undo — proven through the selection summary label.
         let paidButton = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "plan.paid.")).firstMatch
-        XCTAssertTrue(paidButton.waitForExistence(timeout: 10))
+        for _ in 0..<10 where !paidButton.isHittable { app.swipeUp() }
+        XCTAssertTrue(paidButton.isHittable, "paid control unreachable after funding choice")
         paidButton.tap()
         let paid = NSPredicate(format: "label CONTAINS %@", ", paid.")
         expectation(for: paid, evaluatedWith: selected)
@@ -153,6 +154,32 @@ final class PaydayBridgeUITests: XCTestCase {
         let draftSummary = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Draft:")).firstMatch
         for _ in 0..<10 where !draftSummary.isHittable { app.swipeUp() }
         XCTAssertTrue(draftSummary.isHittable)
+
+        // 12. Backup/CSV export previews sensitive data before any share action.
+        let exportBackup = app.buttons["plan.exportBackup"]
+        for _ in 0..<10 where !exportBackup.isHittable { app.swipeUp() }
+        XCTAssertTrue(exportBackup.isHittable)
+        XCTAssertGreaterThanOrEqual(exportBackup.frame.height, 44)
+        exportBackup.tap()
+        let exportAlert = app.alerts["Sensitive planning data preview"]
+        XCTAssertTrue(exportAlert.waitForExistence(timeout: 10))
+        XCTAssertTrue(exportAlert.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "bills")).firstMatch.exists)
+        exportAlert.buttons["Cancel"].tap()
+
+        let exportCSV = app.buttons["plan.exportCSV"]
+        for _ in 0..<10 where !exportCSV.isHittable { app.swipeUp() }
+        XCTAssertTrue(exportCSV.isHittable)
+        XCTAssertGreaterThanOrEqual(exportCSV.frame.height, 44)
+        exportCSV.tap()
+        let csvAlert = app.alerts["Sensitive planning data preview"]
+        XCTAssertTrue(csvAlert.waitForExistence(timeout: 10))
+        XCTAssertTrue(csvAlert.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "90-day CSV")).firstMatch.exists)
+        csvAlert.buttons["Cancel"].tap()
+
+        let restoreBackup = app.buttons["plan.restoreBackup"]
+        for _ in 0..<10 where !restoreBackup.isHittable { app.swipeUp() }
+        XCTAssertTrue(restoreBackup.isHittable)
+        XCTAssertGreaterThanOrEqual(restoreBackup.frame.height, 44)
     }
 
     private func dismissKeyboard() {
